@@ -4,7 +4,7 @@ import zarr
 from zarr.dtype import VariableLengthBytes, VariableLengthUTF8
 
 # Root of the Zarr store
-root = zarr.open_group("data/zarr_store", mode="w", zarr_format=3)
+root = zarr.open_group("data/zarr_store.zarr", mode="w", zarr_format=3)
 
 meta = root.create_group("meta")
 
