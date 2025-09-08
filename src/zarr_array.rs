@@ -14,11 +14,14 @@ mod tests {
     use datafusion::prelude::SessionContext;
     use futures::TryStreamExt;
     use object_store::local::LocalFileSystem;
+    use zarrs::array_subset::ArraySubset;
     use zarrs::group::Group;
+    use zarrs::node::Node;
     use zarrs_filesystem::FilesystemStore;
     use zarrs_object_store::AsyncObjectStore;
     use zarrs_storage::{
-        AsyncReadableListableStorage, AsyncReadableListableStorageTraits, ReadableListableStorage,
+        AsyncReadableListableStorage, AsyncReadableListableStorageTraits, ListableStorageTraits,
+        ReadableListableStorage,
     };
 
     use super::*;
@@ -27,18 +30,92 @@ mod tests {
         let dir = current_dir().unwrap();
         let store = FilesystemStore::new(dir.join("data/zarr_store.zarr")).unwrap();
         Arc::new(store)
-        // ReadableListableStorage
-        // AsyncObjectStore::new(
-        //     LocalFileSystem::new_with_prefix(dir.join("data/zarr_store.zarr/meta")).unwrap(),
-        // )
     }
 
     fn create_store_async() -> Arc<dyn AsyncReadableListableStorageTraits + Send + Unpin> {
         let dir = current_dir().unwrap();
         // let store = FilesystemStore::new(dir.join("data/zarr_store.zarr")).unwrap();
         Arc::new(AsyncObjectStore::new(
-            LocalFileSystem::new_with_prefix(dir.join("data/zarr_store.zarr/meta")).unwrap(),
+            LocalFileSystem::new_with_prefix(dir.join("data/zarr_store.zarr")).unwrap(),
         ))
+    }
+
+    #[test]
+    fn test_load_collection_array() {
+        let store = create_store_sync();
+
+        // List what's available in the store
+        println!("Listing store contents:");
+        if let Ok(keys) = store.list() {
+            for key in keys {
+                println!("  Key: {:?}", key);
+            }
+        }
+
+        // Try to open the root group first, then get the collection array
+        println!("Trying to open root group...");
+        let group = Group::open(store.clone(), "/").unwrap();
+        println!("Successfully opened root group");
+
+        dbg!(group.child_paths(true).unwrap());
+        dbg!(group.attributes());
+
+        // Try to get children
+        let children = group.children(false).unwrap();
+        println!("Found {} children in group", children.len());
+        for child in &children {
+            println!("  Child: {:?}", child);
+        }
+
+        println!("Trying to open collection array from group...");
+
+        let collection_array =
+            zarrs::array::Array::open(store.clone(), "/meta/collection").unwrap();
+        dbg!(collection_array.data_type());
+        dbg!(collection_array.shape());
+
+        let x = collection_array.retrieve_chunk(&[0]).unwrap();
+        dbg!(x);
+
+        // let collection_array = zarrs::array::Array::open(store.clone(), "/meta/bbox").unwrap();
+        // dbg!(collection_array.data_type());
+        // dbg!(collection_array.shape());
+
+        // match  {
+        //     Ok(collection_array) => {
+        //         println!("Successfully opened collection array!");
+
+        //         // Create array subset for the entire array
+        //         let array_subset = ArraySubset::new_with_shape(collection_array.shape().to_vec());
+
+        //         // Read the entire array as strings
+        //         let data: Vec<String> = collection_array
+        //             .retrieve_array_subset_elements(&array_subset)
+        //             .unwrap();
+
+        //         println!("Collection array contents:");
+        //         for (i, item) in data.iter().enumerate() {
+        //             println!("  [{}]: {}", i, item);
+        //         }
+
+        //         println!("Array shape: {:?}", collection_array.shape());
+        //         println!("Data type: {:?}", collection_array.data_type());
+
+        //         // Basic assertions
+        //         assert!(!data.is_empty(), "Collection array should not be empty");
+        //         assert_eq!(
+        //             collection_array.shape(),
+        //             &[3],
+        //             "Collection array should have 3 elements"
+        //         );
+        //     }
+        //     Err(e) => {
+        //         println!("Still failed to open collection array: {:?}", e);
+        //         println!(
+        //             "This is expected with current zarrs version - the compressed data shows 'collection_abc' which are our values"
+        //         );
+        //     }
+        // }
     }
 
     #[test]
