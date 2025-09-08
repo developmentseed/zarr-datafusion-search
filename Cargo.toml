@@ -7,6 +7,7 @@ edition = "2024"
 arrow = { version = "55.2.0" }
 arrow-array = { version = "55.2.0" }
 arrow-schema = { version = "55.2.0" }
+arrow-zarr = { git = "https://github.com/datafusion-contrib/arrow-zarr", rev = "e61b8df47fc3dfd1a95b305c82420276b9efab86" }
 async-stream = "0.3"
 async-trait = { version = "0.1.89" }
 bytes = { version = "1.10.1" }

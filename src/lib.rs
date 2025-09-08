@@ -1,5 +1,6 @@
 pub mod file_format;
 pub mod source;
+pub mod zarr_array;
 
 pub use file_format::{ZarrMetaFormat, ZarrMetaFormatFactory};
 

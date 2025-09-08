@@ -298,6 +298,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "arrow-zarr"
+version = "0.1.0"
+source = "git+https://github.com/datafusion-contrib/arrow-zarr?rev=e61b8df47fc3dfd1a95b305c82420276b9efab86#e61b8df47fc3dfd1a95b305c82420276b9efab86"
+dependencies = [
+ "arrow",
+ "arrow-array",
+ "arrow-schema",
+ "async-stream",
+ "async-trait",
+ "bytes",
+ "datafusion",
+ "futures",
+ "futures-util",
+ "itertools",
+ "object_store",
+ "tokio",
+ "tokio-test",
+ "zarrs",
+ "zarrs_filesystem",
+ "zarrs_metadata",
+ "zarrs_object_store",
+ "zarrs_storage",
+]
+
+[[package]]
 name = "async-compression"
 version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3764,6 +3789,7 @@ dependencies = [
  "arrow",
  "arrow-array",
  "arrow-schema",
+ "arrow-zarr",
  "async-stream",
  "async-trait",
  "bytes",
