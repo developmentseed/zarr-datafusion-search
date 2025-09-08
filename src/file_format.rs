@@ -1,16 +1,20 @@
 use std::any::Any;
 use std::sync::Arc;
 
-use arrow_schema::SchemaRef;
+use arrow_schema::{DataType, Field, Schema, SchemaRef, TimeUnit};
 use async_trait::async_trait;
 use datafusion::catalog::Session;
 use datafusion::common::{GetExt, Statistics};
 use datafusion::datasource::file_format::file_compression_type::FileCompressionType;
 use datafusion::datasource::file_format::{FileFormat, FileFormatFactory};
 use datafusion::datasource::physical_plan::{FileScanConfig, FileSource};
-use datafusion::error::Result;
+use datafusion::error::{DataFusionError, Result};
 use datafusion::physical_plan::ExecutionPlan;
 use object_store::{ObjectMeta, ObjectStore};
+use zarrs::group::Group;
+use zarrs_filesystem::FilesystemStore;
+
+use crate::source::ZarrMetaSource;
 
 #[derive(Debug, Clone, Default)]
 pub struct ZarrMetaFormatFactory {}
@@ -22,8 +26,8 @@ impl FileFormatFactory for ZarrMetaFormatFactory {
 
     fn create(
         &self,
-        state: &dyn Session,
-        format_options: &std::collections::HashMap<String, String>,
+        _state: &dyn Session,
+        _format_options: &std::collections::HashMap<String, String>,
     ) -> Result<Arc<dyn FileFormat>> {
         Ok(self.default())
     }
@@ -65,36 +69,88 @@ impl FileFormat for ZarrMetaFormat {
 
     async fn infer_schema(
         &self,
-        state: &dyn Session,
-        store: &Arc<dyn ObjectStore>,
+        _state: &dyn Session,
+        _store: &Arc<dyn ObjectStore>,
         objects: &[ObjectMeta],
     ) -> Result<SchemaRef> {
-        dbg!("infer_schema called");
-        todo!()
-        // let schema = self.inner.infer_schema(state, store, objects).await?;
-        // // Insert GeoArrow metadata onto geometry column
-        // if let Some(geo_meta_str) = schema.metadata().get("geo") {
-        //     let geo_meta: GeoParquetMetadata = serde_json::from_str(geo_meta_str).unwrap();
-        //     let new_schema =
-        //         infer_geoarrow_schema(&schema, &geo_meta, self.parse_to_native, self.coord_type)
-        //             .unwrap();
-        //     Ok(new_schema)
-        // } else {
-        //     Ok(schema)
-        // }
+        if objects.is_empty() {
+            return Err(DataFusionError::Internal("No objects provided".to_string()));
+        }
+
+        let zarr_path = &objects[0].location;
+        let path_str = zarr_path.to_string();
+
+        // Remove the trailing zarr.json if present to get the zarr directory
+        let zarr_dir = if path_str.ends_with("/zarr.json") {
+            &path_str[..path_str.len() - 10] // Remove "/zarr.json"
+        } else {
+            &path_str
+        };
+
+        let store =
+            FilesystemStore::new(zarr_dir).map_err(|e| DataFusionError::External(Box::new(e)))?;
+
+        let group = Group::open(Arc::new(store), "/")
+            .map_err(|e| DataFusionError::External(Box::new(e)))?;
+
+        let children = group
+            .children(false)
+            .unwrap()
+            .into_iter()
+            .filter_map(|node| match node {
+                zarrs::storage::Node::Array(_, name) => Some(name),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .map_err(|e| DataFusionError::External(Box::new(e)))?;
+
+        let mut fields = Vec::new();
+
+        for child_key in children {
+            // For now, create a simple schema based on the array name
+            let arrow_type = match child_key.as_str() {
+                "bbox" => DataType::Binary,
+                "collection" => DataType::Utf8,
+                "date" => DataType::Timestamp(TimeUnit::Second, None),
+                _ => DataType::Utf8,
+            };
+            // .map_err(|e| DataFusionError::External(Box::new(e)))?;
+
+            let zarr_data_type = array_reader.data_type();
+            let arrow_type = match zarr_data_type {
+                zarrs::array::DataType::String => DataType::Utf8,
+                zarrs::array::DataType::RawBits(_) => DataType::Binary,
+                _ => {
+                    // Check if it's a datetime type by examining metadata
+                    if let Some(attributes) = array_reader.attributes() {
+                        if attributes.contains_key("_ARRAY_DIMENSIONS") {
+                            DataType::Timestamp(TimeUnit::Second, None)
+                        } else {
+                            DataType::Utf8 // Default to string for unknown types
+                        }
+                    } else {
+                        DataType::Utf8 // Default to string for unknown types
+                    }
+                }
+            };
+
+            fields.push(Field::new(child_key, arrow_type, true));
+        }
+
+        let schema = Schema::new(fields);
+        Ok(Arc::new(schema))
     }
 
     async fn infer_stats(
         &self,
         _state: &dyn Session,
-        store: &Arc<dyn ObjectStore>,
-        table_schema: SchemaRef,
-        object: &ObjectMeta,
+        _store: &Arc<dyn ObjectStore>,
+        _table_schema: SchemaRef,
+        _object: &ObjectMeta,
     ) -> Result<Statistics> {
-        todo!()
-        // self.inner
-        //     .infer_stats(_state, store, table_schema, object)
-        //     .await
+        // For now, return default statistics
+        // Could be enhanced to read actual statistics from Zarr metadata
+        Ok(Statistics::default())
     }
 
     async fn create_physical_plan(
@@ -102,8 +158,8 @@ impl FileFormat for ZarrMetaFormat {
         _state: &dyn Session,
         conf: FileScanConfig,
     ) -> Result<Arc<dyn ExecutionPlan>> {
-        todo!()
-        // self.inner.create_physical_plan(_state, conf).await
+        let source = ZarrMetaSource::new(conf.file_schema.clone());
+        source.create_physical_plan(conf).await
     }
 
     // async fn create_writer_physical_plan(
@@ -117,7 +173,6 @@ impl FileFormat for ZarrMetaFormat {
     // }
 
     fn file_source(&self) -> Arc<dyn FileSource> {
-        todo!()
-        // Arc::new(GeoParquetSource::default())
+        Arc::new(ZarrMetaSource::default())
     }
 }
