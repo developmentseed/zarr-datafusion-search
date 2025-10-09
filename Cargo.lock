@@ -315,9 +315,9 @@ dependencies = [
  "object_store",
  "tokio",
  "tokio-test",
- "zarrs",
+ "zarrs 0.19.2",
  "zarrs_filesystem",
- "zarrs_metadata",
+ "zarrs_metadata 0.3.7",
  "zarrs_object_store",
  "zarrs_storage",
 ]
@@ -337,6 +337,28 @@ dependencies = [
  "xz2",
  "zstd",
  "zstd-safe",
+]
+
+[[package]]
+name = "async-generic"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ddf3728566eefa873833159754f5732fb0951d3649e6e5b891cc70d56dd41673"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "async-lock"
+version = "3.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fd03604047cee9b6ce9de9f70c6cd540a0520c813cbd49bae61f33ab80ed1dc"
+dependencies = [
+ "event-listener",
+ "event-listener-strategy",
+ "pin-project-lite",
 ]
 
 [[package]]
@@ -594,7 +616,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "145052bdd345b87320e369255277e3fb5152762ad123a901ef5c262dd38fe8d2"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
+ "wasm-bindgen",
  "windows-link 0.2.0",
 ]
 
@@ -616,6 +640,15 @@ checksum = "3f8e18d0dca9578507f13f9803add0df13362b02c501c1c17734f0dbb52eaf0b"
 dependencies = [
  "unicode-segmentation",
  "unicode-width",
+]
+
+[[package]]
+name = "concurrent-queue"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
+dependencies = [
+ "crossbeam-utils",
 ]
 
 [[package]]
@@ -1474,6 +1507,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "event-listener"
+version = "5.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e13b66accf52311f30a0db42147dadea9850cb48cd070028831ae5f5d4b856ab"
+dependencies = [
+ "concurrent-queue",
+ "parking",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "event-listener-strategy"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
+dependencies = [
+ "event-listener",
+ "pin-project-lite",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2110,6 +2164,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "lru"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f8cc7106155f10bdf99a6f379688f543ad6596a415375b36a59a054ceda1198"
+dependencies = [
+ "hashbrown 0.15.5",
+]
+
+[[package]]
 name = "lz4-sys"
 version = "1.11.1+lz4-1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2390,6 +2453,12 @@ dependencies = [
  "libc",
  "winapi",
 ]
+
+[[package]]
+name = "parking"
+version = "2.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f38d5652c16fde515bb1ecef450ab0f6a219d619a7274976324d5e377f7dceba"
 
 [[package]]
 name = "parking_lot"
@@ -3800,9 +3869,9 @@ dependencies = [
  "object_store",
  "tokio",
  "tokio-test",
- "zarrs",
+ "zarrs 0.21.2",
  "zarrs_filesystem",
- "zarrs_metadata",
+ "zarrs_metadata 0.5.0",
  "zarrs_object_store",
  "zarrs_storage",
 ]
@@ -3824,7 +3893,7 @@ dependencies = [
  "half",
  "inventory",
  "itertools",
- "lru",
+ "lru 0.12.5",
  "moka",
  "ndarray",
  "num",
@@ -3837,9 +3906,66 @@ dependencies = [
  "thread_local",
  "unsafe_cell_slice",
  "zarrs_filesystem",
- "zarrs_metadata",
+ "zarrs_metadata 0.3.7",
  "zarrs_storage",
  "zstd",
+]
+
+[[package]]
+name = "zarrs"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55683fb371f421cfc39325cdc98fed9bb6e9c869114827e60c875dd8f7a4aee0"
+dependencies = [
+ "async-generic",
+ "async-lock",
+ "async-trait",
+ "blosc-src",
+ "bytemuck",
+ "bytes",
+ "chrono",
+ "crc32c",
+ "derive_more 2.0.1",
+ "flate2",
+ "futures",
+ "half",
+ "inventory",
+ "itertools",
+ "lru 0.14.0",
+ "moka",
+ "ndarray",
+ "num",
+ "num-complex",
+ "rayon",
+ "rayon_iter_concurrent_limit",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.16",
+ "thread_local",
+ "unsafe_cell_slice",
+ "zarrs_data_type",
+ "zarrs_filesystem",
+ "zarrs_metadata 0.5.0",
+ "zarrs_metadata_ext",
+ "zarrs_plugin",
+ "zarrs_registry",
+ "zarrs_storage",
+ "zstd",
+]
+
+[[package]]
+name = "zarrs_data_type"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3d6f4333c80a511fc8ed7f84e255fcd43d38c1c752d0e0078172046e25fc839"
+dependencies = [
+ "derive_more 2.0.1",
+ "half",
+ "inventory",
+ "num",
+ "thiserror 2.0.16",
+ "zarrs_metadata 0.5.0",
+ "zarrs_plugin",
 ]
 
 [[package]]
@@ -3877,6 +4003,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "zarrs_metadata"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b5144f87eeac14201a7d20d2cd0787598b1ae6175f4b4a384444e71b6ede004"
+dependencies = [
+ "derive_more 2.0.1",
+ "half",
+ "monostate",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.16",
+]
+
+[[package]]
+name = "zarrs_metadata_ext"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ecad49f2a566b676292b155c4f0831a0034fee49f09ec7a1aeb895a96b98219"
+dependencies = [
+ "derive_more 2.0.1",
+ "half",
+ "monostate",
+ "num",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "thiserror 2.0.16",
+ "zarrs_metadata 0.5.0",
+ "zarrs_registry",
+]
+
+[[package]]
 name = "zarrs_object_store"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3886,6 +4044,24 @@ dependencies = [
  "futures",
  "object_store",
  "zarrs_storage",
+]
+
+[[package]]
+name = "zarrs_plugin"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9bfe664c4f15bc85b60cbca70d1fc48906b9cd71a6870fb3ae753f5a3550c7db"
+dependencies = [
+ "thiserror 2.0.16",
+]
+
+[[package]]
+name = "zarrs_registry"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "286838805c24e5cdd5e65464ee70c34ae66daa3576d01ca3a87f8e1a758223ee"
+dependencies = [
+ "regex",
 ]
 
 [[package]]
