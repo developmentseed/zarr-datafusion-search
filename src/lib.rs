@@ -1,7 +1,7 @@
 // pub mod file_format;
 // pub mod source;
 #[cfg(test)]
-pub mod test_load_zarrs;
+pub mod testing;
 // pub mod zarr_array;
 
 // pub use file_format::{ZarrMetaFormat, ZarrMetaFormatFactory};
