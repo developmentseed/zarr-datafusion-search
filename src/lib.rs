@@ -1,5 +1,6 @@
 // pub mod file_format;
 // pub mod source;
+pub mod error;
 #[cfg(test)]
 pub mod testing;
 // pub mod zarr_array;

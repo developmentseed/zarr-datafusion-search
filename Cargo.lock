@@ -4044,6 +4044,7 @@ dependencies = [
  "geoarrow-schema",
  "itertools",
  "object_store",
+ "thiserror 2.0.16",
  "tokio",
  "tokio-test",
  "wkb",
