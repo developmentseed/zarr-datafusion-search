@@ -27,13 +27,13 @@ use crate::error::ZarrDataFusionResult;
 
 /// A simple DataFusion table provider that loads data from a Zarr store
 #[derive(Debug)]
-pub struct BasicZarrTableProvider {
+pub struct ZarrTableProvider {
     schema: SchemaRef,
     zarr_path: String,
 }
 
-impl BasicZarrTableProvider {
-    /// Create a new BasicZarrTableProvider from a Zarr store path
+impl ZarrTableProvider {
+    /// Create a new ZarrTableProvider from a Zarr store path
     pub fn new(zarr_path: String) -> Result<Self, Box<dyn std::error::Error>> {
         // Define the schema based on the expected Zarr arrays
         let wkt_crs = Crs::from_authority_code("EPSG:4326".to_string());
@@ -55,7 +55,7 @@ impl BasicZarrTableProvider {
 }
 
 #[async_trait]
-impl TableProvider for BasicZarrTableProvider {
+impl TableProvider for ZarrTableProvider {
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -203,7 +203,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_basic_table_provider() {
-        let provider = BasicZarrTableProvider::new("data/zarr_store.zarr".to_string()).unwrap();
+        let provider = ZarrTableProvider::new("data/zarr_store.zarr".to_string()).unwrap();
 
         // Register with DataFusion
         let ctx = SessionContext::new();
@@ -224,7 +224,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "Projection support"]
     async fn test_table_provider_with_sql() {
-        let provider = BasicZarrTableProvider::new("data/zarr_store.zarr".to_string()).unwrap();
+        let provider = ZarrTableProvider::new("data/zarr_store.zarr".to_string()).unwrap();
 
         // Register with DataFusion
         let ctx = SessionContext::new();

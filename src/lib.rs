@@ -1,9 +1,7 @@
-// pub mod file_format;
-// pub mod source;
 pub mod error;
+pub mod table_provider;
 #[cfg(test)]
 pub mod testing;
-// pub mod zarr_array;
 
 // pub use file_format::{ZarrMetaFormat, ZarrMetaFormatFactory};
 
