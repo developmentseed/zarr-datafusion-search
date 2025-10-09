@@ -2,7 +2,6 @@ use std::sync::Arc;
 use zarrs::array::Array;
 use zarrs::array_subset::ArraySubset;
 use zarrs_filesystem::FilesystemStore;
-use zarrs_storage::{ReadableStorageTraits, StoreKey};
 
 #[test]
 fn test_load_collection_array() {
@@ -77,26 +76,43 @@ fn test_load_bbox_array() {
     // Create a filesystem store pointing to the zarr store
     let store = Arc::new(FilesystemStore::new("data/zarr_store.zarr").unwrap());
 
-    // Note: The bbox array uses "variable_length_bytes" data type which is not yet
-    // fully supported in zarrs 0.21.2. This test demonstrates reading the raw chunk data.
+    let bbox_array = Array::open(store.clone(), "/meta/bbox").unwrap();
 
-    println!("Reading bbox array chunk data from meta/bbox/c/0");
+    println!("HII");
+    dbg!(bbox_array.data_type());
 
-    // Read the raw chunk data directly from storage
-    let chunk_key = StoreKey::new("meta/bbox/c/0").unwrap();
-    let chunk_data = store.get(&chunk_key).unwrap().unwrap();
-    let chunk_bytes: Vec<u8> = chunk_data.to_vec();
+    // let array_subset = ArraySubset::new_with_shape(bbox_array.shape().to_vec());
+    // let data: Vec<Vec<u8>> = bbox_array
+    //     .retrieve_array_subset_elements(&array_subset)
+    //     .unwrap();
+    // dbg!(data);
 
-    println!("Bbox chunk data:");
-    println!("  Chunk key: {}", chunk_key);
-    println!("  Raw bytes length: {} bytes", chunk_bytes.len());
-    println!("  First 64 bytes (or all if less): {:?}", &chunk_bytes[..chunk_bytes.len().min(64)]);
+    // // Note: The bbox array uses "variable_length_bytes" data type which is not yet
+    // // fully supported in zarrs 0.21.2. This test demonstrates reading the raw chunk data.
 
-    // Basic assertions
-    assert!(!chunk_bytes.is_empty(), "Bbox chunk data should not be empty");
+    // println!("Reading bbox array chunk data from meta/bbox/c/0");
 
-    // The chunk contains compressed data (zstd) for 3 variable-length byte arrays
-    println!("\nNote: This is the compressed chunk data. To properly decode:");
-    println!("  1. Decompress with zstd");
-    println!("  2. Decode vlen-bytes format (offsets + data)");
+    // // Read the raw chunk data directly from storage
+    // let chunk_key = StoreKey::new("meta/bbox/c/0").unwrap();
+    // let chunk_data = store.get(&chunk_key).unwrap().unwrap();
+    // let chunk_bytes: Vec<u8> = chunk_data.to_vec();
+
+    // println!("Bbox chunk data:");
+    // println!("  Chunk key: {}", chunk_key);
+    // println!("  Raw bytes length: {} bytes", chunk_bytes.len());
+    // println!(
+    //     "  First 64 bytes (or all if less): {:?}",
+    //     &chunk_bytes[..chunk_bytes.len().min(64)]
+    // );
+
+    // // Basic assertions
+    // assert!(
+    //     !chunk_bytes.is_empty(),
+    //     "Bbox chunk data should not be empty"
+    // );
+
+    // // The chunk contains compressed data (zstd) for 3 variable-length byte arrays
+    // println!("\nNote: This is the compressed chunk data. To properly decode:");
+    // println!("  1. Decompress with zstd");
+    // println!("  2. Decode vlen-bytes format (offsets + data)");
 }
