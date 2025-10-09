@@ -36,3 +36,37 @@ fn test_load_collection_array() {
         "Collection array should have 3 elements"
     );
 }
+
+#[test]
+fn test_load_date_array() {
+    // Create a filesystem store pointing to the zarr store
+    let store = Arc::new(FilesystemStore::new("data/zarr_store.zarr").unwrap());
+
+    // Open the date array from the /meta/date path
+    let date_array = Array::open(store, "/meta/date").unwrap();
+
+    // Print array metadata
+    println!("Array shape: {:?}", date_array.shape());
+    println!("Data type: {:?}", date_array.data_type());
+
+    // Create array subset for the entire array (shape is [3])
+    let array_subset = ArraySubset::new_with_shape(date_array.shape().to_vec());
+
+    // Read the entire array as i64 milliseconds (datetime64[ms])
+    let data: Vec<i64> = date_array
+        .retrieve_array_subset_elements(&array_subset)
+        .unwrap();
+
+    println!("Date array contents (milliseconds since epoch):");
+    for (i, ms) in data.iter().enumerate() {
+        println!("  [{}]: {} ms", i, ms);
+    }
+
+    // Basic assertions
+    assert!(!data.is_empty(), "Date array should not be empty");
+    assert_eq!(
+        date_array.shape(),
+        &[3],
+        "Date array should have 3 elements"
+    );
+}
