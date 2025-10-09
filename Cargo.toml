@@ -4,22 +4,21 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-arrow = { version = "55.2.0" }
-arrow-array = { version = "55.2.0" }
-arrow-schema = { version = "55.2.0" }
-arrow-zarr = { git = "https://github.com/datafusion-contrib/arrow-zarr", rev = "e61b8df47fc3dfd1a95b305c82420276b9efab86" }
+arrow = { version = "56.2.0" }
+arrow-array = { version = "56.2.0" }
+arrow-schema = { version = "56.2.0" }
 async-stream = "0.3"
 async-trait = { version = "0.1.89" }
 bytes = { version = "1.10.1" }
-datafusion = { version = "49.0.0" }
+datafusion = { version = "50.1" }
 futures = { version = "0.3.31" }
 futures-util = { version = "0.3.31" }
 itertools = { version = "0.14.0" }
-object_store = { version = "0.12.0" }
+object_store = { version = "0.12.4" }
 tokio = { version = "1.46.1", features = ["rt", "macros", "net"] }
 tokio-test = { version = "0.4.4" }
-zarrs = { version = "0.21.2", features = ["async", "chrono"] }
-zarrs_filesystem = { version = "0.2.0" }
-zarrs_metadata = { version = "0.5.0" }
-zarrs_object_store = { version = "0.4.0" }
-zarrs_storage = { version = "0.3.0", features = ["async"] }
+zarrs = { version = "0.22.2", features = ["async", "chrono"] }
+zarrs_filesystem = { version = "0.3.2" }
+zarrs_metadata = { version = "0.6.0" }
+zarrs_object_store = { version = "0.5.0" }
+zarrs_storage = { version = "0.4.0", features = ["async"] }

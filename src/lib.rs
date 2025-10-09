@@ -1,33 +1,34 @@
-pub mod file_format;
-pub mod source;
-pub mod test_load_zarrs;
-pub mod zarr_array;
-
-pub use file_format::{ZarrMetaFormat, ZarrMetaFormatFactory};
-
+// pub mod file_format;
+// pub mod source;
 #[cfg(test)]
-mod tests {
-    use std::env::current_dir;
-    use std::sync::Arc;
+pub mod test_load_zarrs;
+// pub mod zarr_array;
 
-    use datafusion::execution::SessionStateBuilder;
-    use datafusion::prelude::SessionContext;
+// pub use file_format::{ZarrMetaFormat, ZarrMetaFormatFactory};
 
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use std::env::current_dir;
+//     use std::sync::Arc;
 
-    #[tokio::test]
-    async fn test_geoparquet() {
-        let file_format = Arc::new(ZarrMetaFormatFactory::default());
-        let state = SessionStateBuilder::new()
-            .with_file_formats(vec![file_format])
-            .build();
-        let ctx = SessionContext::new_with_state(state).enable_url_table();
+//     use datafusion::execution::SessionStateBuilder;
+//     use datafusion::prelude::SessionContext;
 
-        dbg!(current_dir().unwrap());
-        let df = ctx
-            .sql("SELECT * FROM 'data/zarr_store.zarr' as table")
-            .await
-            .unwrap();
-        df.show().await.unwrap();
-    }
-}
+//     use super::*;
+
+//     #[tokio::test]
+//     async fn test_geoparquet() {
+//         let file_format = Arc::new(ZarrMetaFormatFactory::default());
+//         let state = SessionStateBuilder::new()
+//             .with_file_formats(vec![file_format])
+//             .build();
+//         let ctx = SessionContext::new_with_state(state).enable_url_table();
+
+//         dbg!(current_dir().unwrap());
+//         let df = ctx
+//             .sql("SELECT * FROM 'data/zarr_store.zarr' as table")
+//             .await
+//             .unwrap();
+//         df.show().await.unwrap();
+//     }
+// }

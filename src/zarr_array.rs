@@ -57,8 +57,8 @@ mod tests {
         let group = Group::open(store.clone(), "/").unwrap();
         println!("Successfully opened root group");
 
-        dbg!(group.child_paths(true).unwrap());
-        dbg!(group.attributes());
+        // dbg!(group.child_paths(true).unwrap());
+        // dbg!(group.attributes());
 
         // Try to get children
         let children = group.children(false).unwrap();
@@ -74,12 +74,22 @@ mod tests {
         dbg!(collection_array.data_type());
         dbg!(collection_array.shape());
 
-        let x = collection_array.retrieve_chunk(&[0]).unwrap();
-        dbg!(x);
+        // How to read values from a collection array
+        // Create array subset for the entire array
+        let array_subset = ArraySubset::new_with_shape(collection_array.shape().to_vec());
+        // Read the entire array as strings
+        let data: Vec<String> = collection_array
+            .retrieve_array_subset_elements(&array_subset)
+            .unwrap();
 
-        // let collection_array = zarrs::array::Array::open(store.clone(), "/meta/bbox").unwrap();
-        // dbg!(collection_array.data_type());
-        // dbg!(collection_array.shape());
+        dbg!(data);
+
+        // let x = collection_array.retrieve_chunk(&[0]).unwrap();
+        // dbg!(x);
+
+        let collection_array = zarrs::array::Array::open(store.clone(), "/meta/date").unwrap();
+        dbg!(collection_array.data_type());
+        dbg!(collection_array.shape());
 
         // match  {
         //     Ok(collection_array) => {
