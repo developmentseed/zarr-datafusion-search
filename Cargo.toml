@@ -1,0 +1,28 @@
+[package]
+name = "zarr-datafusion-internal"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+arrow = { version = "56.2.0" }
+arrow-array = { version = "56.2.0" }
+arrow-schema = { version = "56.2.0" }
+async-stream = "0.3"
+async-trait = { version = "0.1.89" }
+bytes = { version = "1.10.1" }
+datafusion = { version = "50.1" }
+futures = { version = "0.3.31" }
+futures-util = { version = "0.3.31" }
+geoarrow-array = "0.5.0"
+geoarrow-schema = "0.5.0"
+itertools = { version = "0.14.0" }
+object_store = { version = "0.12.4" }
+thiserror = "2"
+tokio = { version = "1.46.1", features = ["rt", "macros", "net"] }
+tokio-test = { version = "0.4.4" }
+wkb = "0.9.1"
+zarrs = { version = "0.22.2", features = ["async", "chrono"] }
+zarrs_filesystem = { version = "0.3.2" }
+zarrs_metadata = { version = "0.6.0" }
+zarrs_object_store = { version = "0.5.0" }
+zarrs_storage = { version = "0.4.0", features = ["async"] }
