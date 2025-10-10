@@ -1,0 +1,23 @@
+[package]
+name = "zarr-datafusion-internal-python"
+version = "0.1.0"
+edition = "2024"
+authors = ["Kyle Barron <kylebarron2@gmail.com>"]
+description = "Python bindings for zarr-datafusion-internal"
+readme = "README.md"
+# repository = "https://github.com/datafusion-contrib/datafusion-geo"
+license = "MIT OR Apache-2.0"
+keywords = ["python", "arrow", "geospatial"]
+categories = ["wasm", "science::geo"]
+rust-version = "1.85"
+
+[lib]
+name = "_rust"
+crate-type = ["cdylib"]
+
+[features]
+
+[dependencies]
+datafusion-ffi = "50"
+pyo3 = { version = "0.26", features = ["abi3-py39"] }
+zarr-datafusion-internal = { path = "../" }
