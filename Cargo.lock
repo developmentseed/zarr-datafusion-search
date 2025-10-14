@@ -3986,6 +3986,8 @@ dependencies = [
  "tokio",
  "zarrs",
  "zarrs_filesystem",
+ "zarrs_object_store",
+ "zarrs_storage",
 ]
 
 [[package]]
@@ -4097,6 +4099,18 @@ dependencies = [
  "thiserror 2.0.16",
  "zarrs_metadata",
  "zarrs_registry",
+]
+
+[[package]]
+name = "zarrs_object_store"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5d9d0d3db426dd50dfb0b5d7cc1660bda368caeb5cd8645c60c46bc4f261a19"
+dependencies = [
+ "async-trait",
+ "futures",
+ "object_store",
+ "zarrs_storage",
 ]
 
 [[package]]

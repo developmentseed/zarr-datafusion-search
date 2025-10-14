@@ -16,12 +16,15 @@ use datafusion::physical_plan::{
 use geoarrow_array::GeoArrowArray;
 use geoarrow_array::array::WktArray;
 use geoarrow_schema::{Crs, WktType};
+use object_store::ObjectStore;
 use std::any::Any;
-use std::fmt;
+use std::fmt::{self, Debug};
 use std::sync::Arc;
-use zarrs::array::Array;
+use zarrs::array::{Array, ElementOwned};
 use zarrs::array_subset::ArraySubset;
-use zarrs_filesystem::FilesystemStore;
+use zarrs::storage::{AsyncReadableListableStorageTraits, ReadableListableStorageTraits};
+use zarrs_filesystem::{FilesystemStore, FilesystemStoreCreateError};
+use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::error::ZarrDataFusionResult;
 
@@ -29,17 +32,37 @@ use crate::error::ZarrDataFusionResult;
 #[derive(Debug)]
 pub struct ZarrTableProvider {
     schema: SchemaRef,
-    zarr_path: String,
+    zarr_backend: ZarrBackend,
 }
 
 impl ZarrTableProvider {
     /// Create a new ZarrTableProvider from a Zarr store path
-    pub fn new(zarr_path: String) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new_filesystem<P: AsRef<std::path::Path>>(
+        zarr_path: P,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let zarr_backend = ZarrBackend::new_filesystem(zarr_path)?;
+        let schema = Self::construct_schema();
+        Ok(Self {
+            schema,
+            zarr_backend,
+        })
+    }
+
+    pub fn new_object_store<T: ObjectStore>(store: T) -> Self {
+        let zarr_backend = ZarrBackend::new_object_store(store);
+        let schema = Self::construct_schema();
+        Self {
+            schema,
+            zarr_backend,
+        }
+    }
+
+    fn construct_schema() -> SchemaRef {
         // Define the schema based on the expected Zarr arrays
         let wkt_crs = Crs::from_authority_code("EPSG:4326".to_string());
         let wkt_metadata = Arc::new(geoarrow_schema::Metadata::new(wkt_crs, None));
 
-        let schema = Arc::new(Schema::new(vec![
+        Arc::new(Schema::new(vec![
             Field::new("collection", DataType::Utf8, false),
             Field::new(
                 "date",
@@ -48,9 +71,7 @@ impl ZarrTableProvider {
             ),
             Field::new("wkt_field", DataType::Utf8, false)
                 .with_extension_type(WktType::new(wkt_metadata)),
-        ]));
-
-        Ok(Self { schema, zarr_path })
+        ]))
     }
 }
 
@@ -76,59 +97,84 @@ impl TableProvider for ZarrTableProvider {
         _limit: Option<usize>,
     ) -> Result<Arc<dyn ExecutionPlan>> {
         Ok(Arc::new(ZarrExec::new(
-            self.zarr_path.clone(),
+            self.zarr_backend.clone(),
             self.schema.clone(),
             projection.cloned(),
         )))
     }
 }
 
-/// Custom ExecutionPlan that loads data from Zarr on execution
-#[derive(Debug)]
-struct ZarrExec {
-    zarr_path: String,
-    schema: SchemaRef,
-    #[allow(dead_code)]
-    projection: Option<Vec<usize>>,
-    properties: PlanProperties,
+#[derive(Clone)]
+struct SyncZarrBackend(Arc<dyn ReadableListableStorageTraits>);
+
+impl SyncZarrBackend {
+    fn load_array<T: ElementOwned>(&self, path: &str) -> ZarrDataFusionResult<Vec<T>> {
+        let array = Array::open(self.0.clone(), path)?;
+        let full_subset = ArraySubset::new_with_shape(array.shape().to_vec());
+        Ok(array.retrieve_array_subset_elements(&full_subset)?)
+    }
 }
 
-impl ZarrExec {
-    fn new(zarr_path: String, schema: SchemaRef, projection: Option<Vec<usize>>) -> Self {
-        let properties = PlanProperties::new(
-            EquivalenceProperties::new(schema.clone()),
-            Partitioning::UnknownPartitioning(1),
-            EmissionType::Final,
-            Boundedness::Bounded,
-        );
+#[derive(Clone)]
+struct AsyncZarrBackend(Arc<dyn AsyncReadableListableStorageTraits>);
 
-        Self {
-            zarr_path,
-            schema,
-            projection,
-            properties,
+impl AsyncZarrBackend {
+    async fn load_array<T: ElementOwned + MaybeSend + MaybeSync>(
+        &self,
+        path: &str,
+    ) -> ZarrDataFusionResult<Vec<T>> {
+        let array = Array::async_open(self.0.clone(), path).await?;
+        let full_subset = ArraySubset::new_with_shape(array.shape().to_vec());
+        Ok(array
+            .async_retrieve_array_subset_elements(&full_subset)
+            .await?)
+    }
+}
+
+#[derive(Clone)]
+enum ZarrBackend {
+    Sync(SyncZarrBackend),
+    Async(AsyncZarrBackend),
+}
+
+impl Debug for ZarrBackend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ZarrBackend::Sync(_) => write!(f, "ZarrBackend::Sync"),
+            ZarrBackend::Async(_) => write!(f, "ZarrBackend::Async"),
+        }
+    }
+}
+
+impl ZarrBackend {
+    fn new_filesystem<P: AsRef<std::path::Path>>(
+        base_path: P,
+    ) -> Result<Self, FilesystemStoreCreateError> {
+        Ok(Self::Sync(SyncZarrBackend(Arc::new(FilesystemStore::new(
+            base_path,
+        )?))))
+    }
+
+    fn new_object_store<T: ObjectStore>(store: T) -> Self {
+        Self::Async(AsyncZarrBackend(Arc::new(
+            zarrs_object_store::AsyncObjectStore::new(store),
+        )))
+    }
+
+    async fn load_array<T: ElementOwned + MaybeSend + MaybeSync>(
+        &self,
+        path: &str,
+    ) -> ZarrDataFusionResult<Vec<T>> {
+        match self {
+            ZarrBackend::Sync(sync_backend) => sync_backend.load_array(path),
+            ZarrBackend::Async(async_backend) => async_backend.load_array(path).await,
         }
     }
 
-    fn load_data(&self) -> ZarrDataFusionResult<RecordBatch> {
-        // Create a filesystem store pointing to the zarr store
-        let store = Arc::new(FilesystemStore::new(&self.zarr_path)?);
-
-        // Load collection array (strings)
-        let collection_array = Array::open(store.clone(), "/meta/collection")?;
-        let collection_subset = ArraySubset::new_with_shape(collection_array.shape().to_vec());
-        let collection_data: Vec<String> =
-            collection_array.retrieve_array_subset_elements(&collection_subset)?;
-
-        // Load date array (datetime64[ms])
-        let date_array = Array::open(store.clone(), "/meta/date")?;
-        let date_subset = ArraySubset::new_with_shape(date_array.shape().to_vec());
-        let date_data: Vec<i64> = date_array.retrieve_array_subset_elements(&date_subset)?;
-
-        // Load bbox array (strings representing WKT geometries)
-        let bbox_array = Array::open(store.clone(), "/meta/bbox")?;
-        let bbox_subset = ArraySubset::new_with_shape(bbox_array.shape().to_vec());
-        let bbox_data: Vec<String> = bbox_array.retrieve_array_subset_elements(&bbox_subset)?;
+    async fn load_record_batch(self, schema: SchemaRef) -> ZarrDataFusionResult<RecordBatch> {
+        let collection_data: Vec<String> = self.load_array("/meta/collection").await?;
+        let date_data: Vec<i64> = self.load_array("/meta/date").await?;
+        let bbox_data: Vec<String> = self.load_array("/meta/bbox").await?;
 
         // Create Arrow arrays from the loaded data
         let collection_arrow: ArrayRef = Arc::new(StringArray::from(collection_data));
@@ -139,11 +185,39 @@ impl ZarrExec {
 
         // Create the RecordBatch
         let record_batch = RecordBatch::try_new(
-            self.schema.clone(),
+            schema,
             vec![collection_arrow, date_arrow, wkt_arrow.into_array_ref()],
         )?;
 
         Ok(record_batch)
+    }
+}
+
+/// Custom ExecutionPlan that loads data from Zarr on execution
+#[derive(Debug)]
+struct ZarrExec {
+    zarr_backend: ZarrBackend,
+    schema: SchemaRef,
+    #[allow(dead_code)]
+    projection: Option<Vec<usize>>,
+    properties: PlanProperties,
+}
+
+impl ZarrExec {
+    fn new(zarr_backend: ZarrBackend, schema: SchemaRef, projection: Option<Vec<usize>>) -> Self {
+        let properties = PlanProperties::new(
+            EquivalenceProperties::new(schema.clone()),
+            Partitioning::UnknownPartitioning(1),
+            EmissionType::Final,
+            Boundedness::Bounded,
+        );
+
+        Self {
+            zarr_backend,
+            schema,
+            projection,
+            properties,
+        }
     }
 }
 
@@ -180,11 +254,13 @@ impl ExecutionPlan for ZarrExec {
         _partition: usize,
         _context: Arc<TaskContext>,
     ) -> Result<SendableRecordBatchStream> {
-        let record_batch = self.load_data()?;
-        let schema = record_batch.schema();
+        let backend = self.zarr_backend.clone();
+        let stream_schema = self.schema.clone();
         let stream = RecordBatchStreamAdapter::new(
-            schema,
-            futures::stream::once(async move { Ok(record_batch) }),
+            self.schema.clone(),
+            futures::stream::once(
+                async move { Ok(backend.load_record_batch(stream_schema).await?) },
+            ),
         );
         Ok(Box::pin(stream))
     }
@@ -192,7 +268,7 @@ impl ExecutionPlan for ZarrExec {
 
 impl DisplayAs for ZarrExec {
     fn fmt_as(&self, _t: DisplayFormatType, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "ZarrExec: path={}", self.zarr_path)
+        write!(f, "ZarrExec: backend={:?}", self.zarr_backend)
     }
 }
 
@@ -203,7 +279,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_basic_table_provider() {
-        let provider = ZarrTableProvider::new("data/zarr_store.zarr".to_string()).unwrap();
+        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr").unwrap();
 
         // Register with DataFusion
         let ctx = SessionContext::new();
@@ -224,7 +300,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "Projection support"]
     async fn test_table_provider_with_sql() {
-        let provider = ZarrTableProvider::new("data/zarr_store.zarr".to_string()).unwrap();
+        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr").unwrap();
 
         // Register with DataFusion
         let ctx = SessionContext::new();
