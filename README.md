@@ -41,8 +41,3 @@ df = ctx.sql("SELECT * FROM zarr_data;")
 df.show()
 ```
 
-### Create example Zarr files
-
-```bash
-uv run python generate_data.py
-```
