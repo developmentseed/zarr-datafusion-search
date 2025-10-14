@@ -18,3 +18,6 @@ zarrs = { version = "0.22.2", features = ["async", "chrono"] }
 zarrs_filesystem = { version = "0.3.2" }
 # zarrs_object_store = { version = "0.5.0" }
 # zarrs_storage = { version = "0.4.0", features = ["async"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

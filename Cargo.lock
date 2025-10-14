@@ -3983,6 +3983,7 @@ dependencies = [
  "geoarrow-schema",
  "object_store",
  "thiserror 2.0.16",
+ "tokio",
  "zarrs",
  "zarrs_filesystem",
 ]
