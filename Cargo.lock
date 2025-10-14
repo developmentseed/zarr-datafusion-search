@@ -347,28 +347,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-stream"
-version = "0.3.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b5a71a6f37880a80d1d7f19efd781e4b5de42c88f0722cc13bcb6cc2cfe8476"
-dependencies = [
- "async-stream-impl",
- "futures-core",
- "pin-project-lite",
-]
-
-[[package]]
-name = "async-stream-impl"
-version = "0.3.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c7c24de15d275a1ecfd47a380fb4d5ec9bfe0933f309ed5e705b775596a3574d"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "async-trait"
 version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3065,16 +3043,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "socket2"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "233504af464074f9d066d7b5416c5f9b894a5862a6506e306f7b816cdd6f1807"
-dependencies = [
- "libc",
- "windows-sys 0.59.0",
-]
-
-[[package]]
 name = "sqlparser"
 version = "0.58.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3279,9 +3247,7 @@ dependencies = [
  "mio",
  "pin-project-lite",
  "slab",
- "socket2",
  "tokio-macros",
- "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3293,30 +3259,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "tokio-stream"
-version = "0.1.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eca58d7bba4a75707817a2c44174253f9236b2d5fbd055602e9d5c07c139a047"
-dependencies = [
- "futures-core",
- "pin-project-lite",
- "tokio",
-]
-
-[[package]]
-name = "tokio-test"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2468baabc3311435b55dd935f702f42cd1b8abb7e754fb7dfb16bd36aa88f9f7"
-dependencies = [
- "async-stream",
- "bytes",
- "futures-core",
- "tokio",
- "tokio-stream",
 ]
 
 [[package]]
@@ -4034,25 +3976,15 @@ dependencies = [
  "arrow",
  "arrow-array",
  "arrow-schema",
- "async-stream",
  "async-trait",
- "bytes",
  "datafusion",
  "futures",
- "futures-util",
  "geoarrow-array",
  "geoarrow-schema",
- "itertools",
  "object_store",
  "thiserror 2.0.16",
- "tokio",
- "tokio-test",
- "wkb",
  "zarrs",
  "zarrs_filesystem",
- "zarrs_metadata",
- "zarrs_object_store",
- "zarrs_storage",
 ]
 
 [[package]]
@@ -4164,18 +4096,6 @@ dependencies = [
  "thiserror 2.0.16",
  "zarrs_metadata",
  "zarrs_registry",
-]
-
-[[package]]
-name = "zarrs_object_store"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5d9d0d3db426dd50dfb0b5d7cc1660bda368caeb5cd8645c60c46bc4f261a19"
-dependencies = [
- "async-trait",
- "futures",
- "object_store",
- "zarrs_storage",
 ]
 
 [[package]]
