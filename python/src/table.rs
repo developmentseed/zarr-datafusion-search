@@ -12,7 +12,7 @@ pub struct PyZarrTable(Arc<ZarrTableProvider>);
 impl PyZarrTable {
     #[new]
     pub fn new(zarr_path: String) -> PyResult<Self> {
-        let table_provider = ZarrTableProvider::new(zarr_path).map_err(|e| {
+        let table_provider = ZarrTableProvider::new_filesystem(zarr_path).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
                 "Failed to create ZarrTableProvider: {}",
                 e
