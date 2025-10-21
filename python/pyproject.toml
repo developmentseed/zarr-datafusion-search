@@ -19,4 +19,4 @@ module-name = "zarr_datafusion_internal._rust"
 python-source = "python"
 
 [tool.uv]
-dev-dependencies = ["ipykernel"]
+dev-dependencies = ["ipykernel", "maturin"]
