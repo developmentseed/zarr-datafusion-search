@@ -1,4 +1,4 @@
-name: Rust
+name: Python
 
 on:
   push:
@@ -14,8 +14,14 @@ jobs:
   lint-test:
     name: Lint and Test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
     steps:
       - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -33,7 +39,14 @@ jobs:
       - name: "cargo check"
         run: cargo check --all --all-features
 
-      - name: "cargo test"
+      - name: uv sync
+        working-directory: python
+        run: uv sync --no-install-package zarr-datafusion-internal
+
+      - name: "Maturin develop"
         run: |
-          cargo test --all
-          cargo test --all --all-features
+          uv run --no-project maturin develop --uv
+
+      - name: Run pytest
+        working-directory: python
+        run: uv run --no-project pytest

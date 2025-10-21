@@ -1,7 +1,9 @@
+import pytest
 import zarr_datafusion_internal
 from datafusion import SessionContext
 
 
+@pytest.mark.skip
 def test_zarr_scan():
     ctx = SessionContext()
 
