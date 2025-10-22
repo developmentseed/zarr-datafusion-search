@@ -6,5 +6,6 @@ use zarrs_filesystem::FilesystemStore;
 fn test_load_group() {
     let storage = Arc::new(FilesystemStore::new("data/zarr_store.zarr").unwrap());
 
-    let _group = Group::open(storage.clone(), "/meta").unwrap();
+    let group = Group::open(storage.clone(), "/meta").unwrap();
+    dbg!(group.path());
 }

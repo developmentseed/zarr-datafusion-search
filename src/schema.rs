@@ -6,6 +6,7 @@ use zarrs::array::Array;
 use zarrs::array::data_type::DataType as ZarrDataType;
 use zarrs::group::Group;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
+use zarrs::node::NodePath;
 use zarrs::storage::{AsyncReadableListableStorageTraits, ReadableListableStorageTraits};
 
 use crate::error::{ZarrDataFusionError, ZarrDataFusionResult};
@@ -14,26 +15,39 @@ use crate::error::{ZarrDataFusionError, ZarrDataFusionResult};
 pub fn group_arrays_schema<TStorage: ?Sized + ReadableListableStorageTraits>(
     group: &Group<TStorage>,
 ) -> ZarrDataFusionResult<SchemaRef> {
-    arrays_to_schema(&group.child_arrays()?)
+    arrays_to_schema(group.path(), &group.child_arrays()?)
 }
 
 /// Infer an Arrow schema from the arrays in a Zarr group asynchronously
 pub async fn group_arrays_schema_async<TStorage: ?Sized + AsyncReadableListableStorageTraits>(
     group: &Group<TStorage>,
 ) -> ZarrDataFusionResult<SchemaRef> {
-    arrays_to_schema(&group.async_child_arrays().await?)
+    arrays_to_schema(group.path(), &group.async_child_arrays().await?)
 }
 
 fn arrays_to_schema<TStorage: ?Sized>(
+    group_root: &NodePath,
     arrays: &[Array<TStorage>],
 ) -> ZarrDataFusionResult<SchemaRef> {
     let mut fields = vec![];
     for array in arrays.iter() {
         let arrow_dtype = zarr_to_arrow_dtype(array.data_type())?;
-        let field = Field::new(array.path().to_string(), arrow_dtype, false);
+        let field = Field::new(field_name(group_root, array.path()), arrow_dtype, false);
         fields.push(field);
     }
     Ok(Arc::new(Schema::new(fields)))
+}
+
+fn field_name(group_root: &NodePath, array_path: &NodePath) -> String {
+    assert!(array_path.as_str().starts_with(group_root.as_str()),);
+    // Converts from /meta/collection to /collection
+    let array_name_with_slash = array_path
+        .as_str()
+        .strip_prefix(group_root.as_str())
+        .expect("Array path must be within the group root");
+
+    // Converts from /collection to collection
+    array_name_with_slash.trim_start_matches('/').to_string()
 }
 
 /// Maps a Zarr data type to an Arrow data type
@@ -95,13 +109,13 @@ mod tests {
         let schema = group_arrays_schema(&group).unwrap();
 
         let expected_fields = vec![
-            Arc::new(Field::new("/meta/collection", DataType::Utf8View, false)),
+            Arc::new(Field::new("collection", DataType::Utf8View, false)),
             Arc::new(Field::new(
-                "/meta/date",
+                "date",
                 DataType::Timestamp(TimeUnit::Millisecond, None),
                 false,
             )),
-            Arc::new(Field::new("/meta/bbox", DataType::Utf8View, false)),
+            Arc::new(Field::new("bbox", DataType::Utf8View, false)),
         ];
         let expected_schema = Arc::new(Schema::new(expected_fields));
         assert_eq!(&schema, &expected_schema);
