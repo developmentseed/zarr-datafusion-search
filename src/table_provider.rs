@@ -1,5 +1,5 @@
-use arrow_array::{ArrayRef, RecordBatch, StringArray, TimestampMillisecondArray};
-use arrow_schema::{DataType, Field, Schema, SchemaRef, TimeUnit};
+use arrow_array::{ArrayRef, RecordBatch, StringViewArray, TimestampMillisecondArray};
+use arrow_schema::SchemaRef;
 use async_trait::async_trait;
 use datafusion::catalog::Session;
 use datafusion::datasource::{TableProvider, TableType};
@@ -14,19 +14,21 @@ use datafusion::physical_plan::{
     SendableRecordBatchStream,
 };
 use geoarrow_array::GeoArrowArray;
-use geoarrow_array::array::WktArray;
-use geoarrow_schema::{Crs, WktType};
+use geoarrow_array::array::WktViewArray;
+use geoarrow_schema::Crs;
 use object_store::ObjectStore;
 use std::any::Any;
 use std::fmt::{self, Debug};
 use std::sync::Arc;
 use zarrs::array::{Array, ElementOwned};
 use zarrs::array_subset::ArraySubset;
+use zarrs::group::Group;
 use zarrs::storage::{AsyncReadableListableStorageTraits, ReadableListableStorageTraits};
 use zarrs_filesystem::{FilesystemStore, FilesystemStoreCreateError};
 use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::error::ZarrDataFusionResult;
+use crate::schema::{group_arrays_schema, group_arrays_schema_async};
 
 /// A simple DataFusion table provider that loads data from a Zarr store
 #[derive(Debug)]
@@ -38,40 +40,27 @@ pub struct ZarrTableProvider {
 impl ZarrTableProvider {
     /// Create a new ZarrTableProvider from a Zarr store path
     pub fn new_filesystem<P: AsRef<std::path::Path>>(
-        zarr_path: P,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        let zarr_backend = ZarrBackend::new_filesystem(zarr_path)?;
-        let schema = Self::construct_schema();
+        base_path: P,
+        group_path: &str,
+    ) -> ZarrDataFusionResult<Self> {
+        let zarr_backend = SyncZarrBackend::new_filesystem(base_path)?;
+        let schema = zarr_backend.infer_group_schema(group_path)?;
         Ok(Self {
             schema,
-            zarr_backend,
+            zarr_backend: zarr_backend.into(),
         })
     }
 
-    pub fn new_object_store<T: ObjectStore>(store: T) -> Self {
-        let zarr_backend = ZarrBackend::new_object_store(store);
-        let schema = Self::construct_schema();
-        Self {
+    pub async fn new_object_store<T: ObjectStore>(
+        store: T,
+        group_path: &str,
+    ) -> ZarrDataFusionResult<Self> {
+        let zarr_backend = AsyncZarrBackend::new_object_store(store);
+        let schema = zarr_backend.infer_group_schema(group_path).await?;
+        Ok(Self {
             schema,
-            zarr_backend,
-        }
-    }
-
-    fn construct_schema() -> SchemaRef {
-        // Define the schema based on the expected Zarr arrays
-        let wkt_crs = Crs::from_authority_code("EPSG:4326".to_string());
-        let wkt_metadata = Arc::new(geoarrow_schema::Metadata::new(wkt_crs, None));
-
-        Arc::new(Schema::new(vec![
-            Field::new("collection", DataType::Utf8, false),
-            Field::new(
-                "date",
-                DataType::Timestamp(TimeUnit::Millisecond, None),
-                false,
-            ),
-            Field::new("wkt_field", DataType::Utf8, false)
-                .with_extension_type(WktType::new(wkt_metadata)),
-        ]))
+            zarr_backend: zarr_backend.into(),
+        })
     }
 }
 
@@ -108,10 +97,21 @@ impl TableProvider for ZarrTableProvider {
 struct SyncZarrBackend(Arc<dyn ReadableListableStorageTraits>);
 
 impl SyncZarrBackend {
+    fn new_filesystem<P: AsRef<std::path::Path>>(
+        base_path: P,
+    ) -> Result<Self, FilesystemStoreCreateError> {
+        Ok(SyncZarrBackend(Arc::new(FilesystemStore::new(base_path)?)))
+    }
+
     fn load_array<T: ElementOwned>(&self, path: &str) -> ZarrDataFusionResult<Vec<T>> {
         let array = Array::open(self.0.clone(), path)?;
         let full_subset = ArraySubset::new_with_shape(array.shape().to_vec());
         Ok(array.retrieve_array_subset_elements(&full_subset)?)
+    }
+
+    fn infer_group_schema(&self, group_path: &str) -> ZarrDataFusionResult<SchemaRef> {
+        let group = Group::open(self.0.clone(), group_path)?;
+        group_arrays_schema(&group)
     }
 }
 
@@ -119,6 +119,10 @@ impl SyncZarrBackend {
 struct AsyncZarrBackend(Arc<dyn AsyncReadableListableStorageTraits>);
 
 impl AsyncZarrBackend {
+    fn new_object_store<T: ObjectStore>(store: T) -> Self {
+        AsyncZarrBackend(Arc::new(zarrs_object_store::AsyncObjectStore::new(store)))
+    }
+
     async fn load_array<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
         path: &str,
@@ -129,37 +133,52 @@ impl AsyncZarrBackend {
             .async_retrieve_array_subset_elements(&full_subset)
             .await?)
     }
+
+    async fn infer_group_schema(&self, group_path: &str) -> ZarrDataFusionResult<SchemaRef> {
+        let group = Group::async_open(self.0.clone(), group_path).await?;
+        group_arrays_schema_async(&group).await
+    }
 }
 
 #[derive(Clone)]
 enum ZarrBackend {
-    Sync(SyncZarrBackend),
     Async(AsyncZarrBackend),
+    Sync(SyncZarrBackend),
 }
 
 impl Debug for ZarrBackend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ZarrBackend::Sync(_) => write!(f, "ZarrBackend::Sync"),
             ZarrBackend::Async(_) => write!(f, "ZarrBackend::Async"),
+            ZarrBackend::Sync(_) => write!(f, "ZarrBackend::Sync"),
         }
     }
 }
 
-impl ZarrBackend {
-    fn new_filesystem<P: AsRef<std::path::Path>>(
-        base_path: P,
-    ) -> Result<Self, FilesystemStoreCreateError> {
-        Ok(Self::Sync(SyncZarrBackend(Arc::new(FilesystemStore::new(
-            base_path,
-        )?))))
+impl From<AsyncZarrBackend> for ZarrBackend {
+    fn from(async_backend: AsyncZarrBackend) -> Self {
+        ZarrBackend::Async(async_backend)
     }
+}
 
-    fn new_object_store<T: ObjectStore>(store: T) -> Self {
-        Self::Async(AsyncZarrBackend(Arc::new(
-            zarrs_object_store::AsyncObjectStore::new(store),
-        )))
+impl From<SyncZarrBackend> for ZarrBackend {
+    fn from(sync_backend: SyncZarrBackend) -> Self {
+        ZarrBackend::Sync(sync_backend)
     }
+}
+
+impl ZarrBackend {
+    // fn new_filesystem<P: AsRef<std::path::Path>>(
+    //     base_path: P,
+    // ) -> Result<Self, FilesystemStoreCreateError> {
+    //     Ok(Self::Sync(SyncZarrBackend::new_filesystem(base_path)?))
+    // }
+
+    // fn new_object_store<T: ObjectStore>(store: T) -> Self {
+    //     Self::Async(AsyncZarrBackend(Arc::new(
+    //         zarrs_object_store::AsyncObjectStore::new(store),
+    //     )))
+    // }
 
     async fn load_array<T: ElementOwned + MaybeSend + MaybeSync>(
         &self,
@@ -177,17 +196,25 @@ impl ZarrBackend {
         let bbox_data: Vec<String> = self.load_array("/meta/bbox").await?;
 
         // Create Arrow arrays from the loaded data
-        let collection_arrow: ArrayRef = Arc::new(StringArray::from(collection_data));
+        let collection_arrow: ArrayRef = Arc::new(StringViewArray::from(collection_data));
         let date_arrow: ArrayRef = Arc::new(TimestampMillisecondArray::from(date_data));
         let wkt_crs = Crs::from_authority_code("EPSG:4326".to_string());
         let wkt_metadata = Arc::new(geoarrow_schema::Metadata::new(wkt_crs, None));
-        let wkt_arrow = WktArray::new(bbox_data.into(), wkt_metadata);
+        let wkt_arrow = WktViewArray::new(bbox_data.into(), wkt_metadata);
+
+        let columns = schema
+            .fields()
+            .iter()
+            .map(|field| match field.name().as_str() {
+                "collection" => collection_arrow.clone(),
+                "date" => date_arrow.clone(),
+                "bbox" => wkt_arrow.clone().into_array_ref(),
+                _ => panic!("Unexpected field name: {}", field.name()),
+            })
+            .collect();
 
         // Create the RecordBatch
-        let record_batch = RecordBatch::try_new(
-            schema,
-            vec![collection_arrow, date_arrow, wkt_arrow.into_array_ref()],
-        )?;
+        let record_batch = RecordBatch::try_new(schema, columns)?;
 
         Ok(record_batch)
     }
@@ -279,7 +306,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_basic_table_provider() {
-        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr").unwrap();
+        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr", "/meta").unwrap();
 
         // Register with DataFusion
         let ctx = SessionContext::new();
@@ -300,7 +327,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "Projection support"]
     async fn test_table_provider_with_sql() {
-        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr").unwrap();
+        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr", "/meta").unwrap();
 
         // Register with DataFusion
         let ctx = SessionContext::new();
@@ -325,7 +352,7 @@ mod tests {
         let collection_col = batch
             .column(0)
             .as_any()
-            .downcast_ref::<StringArray>()
+            .downcast_ref::<StringViewArray>()
             .unwrap();
         assert_eq!(collection_col.value(0), "collection_a");
     }

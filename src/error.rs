@@ -3,17 +3,22 @@ use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum ZarrDataFusionError {
-    #[error("DataFusion error: {0}")]
-    DataFusion(#[from] DataFusionError),
-
-    #[error("Zarrs error: {0}")]
-    Zarrs(#[from] zarrs::array::ArrayError),
+    // Zarrs errors
+    #[error("Zarrs array creation error: {0}")]
+    ArrayCreateError(#[from] zarrs::array::ArrayCreateError),
 
     #[error("Zarrs filesystem create error: {0}")]
     FilesystemStoreCreateError(#[from] zarrs_filesystem::FilesystemStoreCreateError),
 
-    #[error("Zarrs array creation error: {0}")]
-    ArrayCreateError(#[from] zarrs::array::ArrayCreateError),
+    #[error("Zarrs group create error: {0}")]
+    GroupCreateError(#[from] zarrs::group::GroupCreateError),
+
+    #[error("Zarrs error: {0}")]
+    Zarrs(#[from] zarrs::array::ArrayError),
+
+    // Other errors
+    #[error("DataFusion error: {0}")]
+    DataFusion(#[from] DataFusionError),
 
     #[error("Arrow error: {0}")]
     Arrow(#[from] arrow::error::ArrowError),
