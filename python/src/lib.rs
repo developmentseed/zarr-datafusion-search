@@ -22,7 +22,7 @@ fn check_debug_build(_py: Python) -> PyResult<()> {
 
         let warnings_mod = _py.import(intern!(_py, "warnings"))?;
         let warning = PyRuntimeWarning::new_err(
-            "zarr-datafusion-internal has not been compiled in release mode. Performance will be degraded.",
+            "zarr-datafusion-search has not been compiled in release mode. Performance will be degraded.",
         );
         let args = PyTuple::new(_py, vec![warning])?;
         warnings_mod.call_method1(intern!(_py, "warn"), args)?;

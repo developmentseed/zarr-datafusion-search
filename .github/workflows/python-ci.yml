@@ -41,7 +41,7 @@ jobs:
 
       - name: uv sync
         working-directory: python
-        run: uv sync --no-install-package zarr-datafusion-internal
+        run: uv sync --no-install-package zarr-datafusion-search
 
       - name: "Maturin develop"
         run: |

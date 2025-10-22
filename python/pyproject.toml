@@ -3,7 +3,7 @@ requires = ["maturin>=1.4.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "zarr_datafusion_internal"
+name = "zarr_datafusion_search"
 requires-python = ">=3.9"
 dependencies = ["datafusion"]
 classifiers = [
@@ -15,7 +15,7 @@ dynamic = ["version"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-module-name = "zarr_datafusion_internal._rust"
+module-name = "zarr_datafusion_search._rust"
 python-source = "python"
 
 [tool.uv]
