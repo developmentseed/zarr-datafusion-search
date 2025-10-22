@@ -1,5 +1,5 @@
 import pytest
-import zarr_datafusion_internal
+import zarr_datafusion_search
 from datafusion import SessionContext
 
 
@@ -8,7 +8,7 @@ def test_zarr_scan():
     ctx = SessionContext()
 
     zarr_path = "../../data/zarr_store.zarr"
-    zarr_table = zarr_datafusion_internal.ZarrTable(zarr_path)
+    zarr_table = zarr_datafusion_search.ZarrTable(zarr_path)
 
     ctx.register_table_provider("zarr_data", zarr_table)
 

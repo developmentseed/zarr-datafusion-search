@@ -3,7 +3,7 @@ use std::sync::Arc;
 use datafusion_ffi::table_provider::FFI_TableProvider;
 use pyo3::prelude::*;
 use pyo3::types::PyCapsule;
-use zarr_datafusion_internal::table_provider::ZarrTableProvider;
+use zarr_datafusion_search::table_provider::ZarrTableProvider;
 
 #[pyclass(name = "ZarrTable", frozen)]
 pub struct PyZarrTable(Arc<ZarrTableProvider>);

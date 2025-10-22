@@ -1,9 +1,9 @@
 [package]
-name = "zarr-datafusion-internal-python"
+name = "zarr-datafusion-search-python"
 version = "0.1.0"
 edition = "2024"
 authors = ["Kyle Barron <kylebarron2@gmail.com>"]
-description = "Python bindings for zarr-datafusion-internal"
+description = "Python bindings for zarr-datafusion-search"
 readme = "README.md"
 # repository = "https://github.com/datafusion-contrib/datafusion-geo"
 license = "MIT OR Apache-2.0"
@@ -20,4 +20,4 @@ crate-type = ["cdylib"]
 [dependencies]
 datafusion-ffi = "50"
 pyo3 = { version = "0.26", features = ["abi3-py39"] }
-zarr-datafusion-internal = { path = "../" }
+zarr-datafusion-search = { path = "../" }

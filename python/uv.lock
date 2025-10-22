@@ -897,7 +897,7 @@ wheels = [
 ]
 
 [[package]]
-name = "zarr-datafusion-internal"
+name = "zarr-datafusion-search"
 source = { editable = "." }
 dependencies = [
     { name = "datafusion" },
