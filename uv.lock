@@ -689,7 +689,7 @@ wheels = [
 ]
 
 [[package]]
-name = "zarr-datafusion-internal"
+name = "zarr-datafusion-search"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
