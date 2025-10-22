@@ -20,4 +20,10 @@ crate-type = ["cdylib"]
 [dependencies]
 datafusion-ffi = "50"
 pyo3 = { version = "0.26", features = ["abi3-py39"] }
+pyo3-async-runtimes = { version = "0.26", features = ["tokio-runtime"] }
+pyo3-object_store = "0.6"
 zarr-datafusion-search = { path = "../" }
+zarrs_metadata = "0.6.1"
+
+[patch.crates-io]
+zarrs_metadata = { git = "https://github.com/zarrs/zarrs", rev = "6ea0464cf50e481cbae0e89de267c7991ed65f3f" }
