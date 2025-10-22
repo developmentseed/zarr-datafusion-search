@@ -1,6 +1,7 @@
 //! Generate an Arrow schema from a Zarr array schema.
 
-use arrow_schema::{DataType, Field, Schema, SchemaRef, TimeUnit};
+use arrow_schema::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit};
+use geoarrow_schema::{Crs, WktType};
 use std::sync::Arc;
 use zarrs::array::Array;
 use zarrs::array::data_type::DataType as ZarrDataType;
@@ -31,9 +32,8 @@ fn arrays_to_schema<TStorage: ?Sized>(
 ) -> ZarrDataFusionResult<SchemaRef> {
     let mut fields = vec![];
     for array in arrays.iter() {
-        let arrow_dtype = zarr_to_arrow_dtype(array.data_type())?;
-        let field = Field::new(field_name(group_root, array.path()), arrow_dtype, false);
-        fields.push(field);
+        let name = field_name(group_root, array.path());
+        fields.push(zarr_to_arrow_field(name, array.data_type())?);
     }
     // Sort fields by name for consistent ordering
     fields.sort_by(|f1, f2| f1.name().cmp(f2.name()));
@@ -53,47 +53,75 @@ fn field_name(group_root: &NodePath, array_path: &NodePath) -> String {
 }
 
 /// Maps a Zarr data type to an Arrow data type
-fn zarr_to_arrow_dtype(zarr_dtype: &ZarrDataType) -> ZarrDataFusionResult<DataType> {
-    match zarr_dtype {
-        ZarrDataType::Bool => Ok(DataType::Boolean),
-        ZarrDataType::Int8 => Ok(DataType::Int8),
-        ZarrDataType::Int16 => Ok(DataType::Int16),
-        ZarrDataType::Int32 => Ok(DataType::Int32),
-        ZarrDataType::Int64 => Ok(DataType::Int64),
-        ZarrDataType::UInt8 => Ok(DataType::UInt8),
-        ZarrDataType::UInt16 => Ok(DataType::UInt16),
-        ZarrDataType::UInt32 => Ok(DataType::UInt32),
-        ZarrDataType::UInt64 => Ok(DataType::UInt64),
-        ZarrDataType::Float16 => Ok(DataType::Float16),
-        ZarrDataType::Float32 => Ok(DataType::Float32),
-        ZarrDataType::Float64 => Ok(DataType::Float64),
-        ZarrDataType::Complex64 | ZarrDataType::Complex128 => Err(ZarrDataFusionError::Custom(
-            "Complex64/Complex128 not yet supported.".to_string(),
-        )),
-        ZarrDataType::RawBits(_size) => Ok(DataType::BinaryView),
-        ZarrDataType::String => Ok(DataType::Utf8View),
+fn zarr_to_arrow_field(name: String, zarr_dtype: &ZarrDataType) -> ZarrDataFusionResult<FieldRef> {
+    if name == "bbox" {
+        match zarr_dtype {
+            ZarrDataType::String => {
+                let crs = Crs::from_authority_code("EPSG:4326".to_string());
+                let geoarrow_metadata = Arc::new(geoarrow_schema::Metadata::new(crs, None));
+
+                return Ok(Arc::new(
+                    Field::new(&name, DataType::Utf8View, false)
+                        .with_extension_type(WktType::new(geoarrow_metadata)),
+                ));
+            }
+            _ => {
+                return Err(ZarrDataFusionError::Custom(
+                    "Expected 'bbox' field to be of Zarr string data type.".to_string(),
+                ));
+            }
+        }
+    }
+
+    let data_type = match zarr_dtype {
+        ZarrDataType::Bool => DataType::Boolean,
+        ZarrDataType::Int8 => DataType::Int8,
+        ZarrDataType::Int16 => DataType::Int16,
+        ZarrDataType::Int32 => DataType::Int32,
+        ZarrDataType::Int64 => DataType::Int64,
+        ZarrDataType::UInt8 => DataType::UInt8,
+        ZarrDataType::UInt16 => DataType::UInt16,
+        ZarrDataType::UInt32 => DataType::UInt32,
+        ZarrDataType::UInt64 => DataType::UInt64,
+        ZarrDataType::Float16 => DataType::Float16,
+        ZarrDataType::Float32 => DataType::Float32,
+        ZarrDataType::Float64 => DataType::Float64,
+        ZarrDataType::Complex64 | ZarrDataType::Complex128 => {
+            return Err(ZarrDataFusionError::Custom(
+                "Complex64/Complex128 not yet supported.".to_string(),
+            ));
+        }
+        ZarrDataType::RawBits(_size) => DataType::BinaryView,
+        ZarrDataType::String => DataType::Utf8View,
         ZarrDataType::NumpyDateTime64 {
             unit,
             scale_factor: _,
         } => match unit {
-            NumpyTimeUnit::Millisecond => Ok(DataType::Timestamp(TimeUnit::Millisecond, None)),
-            NumpyTimeUnit::Microsecond => Ok(DataType::Timestamp(TimeUnit::Microsecond, None)),
-            NumpyTimeUnit::Nanosecond => Ok(DataType::Timestamp(TimeUnit::Nanosecond, None)),
-            NumpyTimeUnit::Second => Ok(DataType::Timestamp(TimeUnit::Second, None)),
-            _ => Err(ZarrDataFusionError::Custom(format!(
-                "Unsupported Numpy datetime64 time unit: {:?}",
-                unit
-            ))),
+            NumpyTimeUnit::Millisecond => DataType::Timestamp(TimeUnit::Millisecond, None),
+            NumpyTimeUnit::Microsecond => DataType::Timestamp(TimeUnit::Microsecond, None),
+            NumpyTimeUnit::Nanosecond => DataType::Timestamp(TimeUnit::Nanosecond, None),
+            NumpyTimeUnit::Second => DataType::Timestamp(TimeUnit::Second, None),
+            _ => {
+                return Err(ZarrDataFusionError::Custom(format!(
+                    "Unsupported Numpy datetime64 time unit: {:?}",
+                    unit
+                )));
+            }
         },
-        ZarrDataType::Extension(ext) => Err(ZarrDataFusionError::Custom(format!(
-            "Unsupported Zarr extension type: {}",
-            ext.name()
-        ))),
-        _ => Err(ZarrDataFusionError::Custom(format!(
-            "Unsupported Zarr data type: {:?}",
-            zarr_dtype
-        ))),
-    }
+        ZarrDataType::Extension(ext) => {
+            return Err(ZarrDataFusionError::Custom(format!(
+                "Unsupported Zarr extension type: {}",
+                ext.name()
+            )));
+        }
+        _ => {
+            return Err(ZarrDataFusionError::Custom(format!(
+                "Unsupported Zarr data type: {:?}",
+                zarr_dtype
+            )));
+        }
+    };
+    Ok(Arc::new(Field::new(&name, data_type, false)))
 }
 
 #[cfg(test)]
@@ -110,8 +138,16 @@ mod tests {
         let group = Group::open(storage.clone(), "/meta").unwrap();
         let schema = group_arrays_schema(&group).unwrap();
 
+        let geoarrow_metadata = Arc::new(geoarrow_schema::Metadata::new(
+            Crs::from_authority_code("EPSG:4326".to_string()),
+            None,
+        ));
+
         let expected_fields = vec![
-            Arc::new(Field::new("bbox", DataType::Utf8View, false)),
+            Arc::new(
+                Field::new("bbox", DataType::Utf8View, false)
+                    .with_extension_type(WktType::new(geoarrow_metadata)),
+            ),
             Arc::new(Field::new("collection", DataType::Utf8View, false)),
             Arc::new(Field::new(
                 "date",
