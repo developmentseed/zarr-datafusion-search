@@ -35,6 +35,8 @@ fn arrays_to_schema<TStorage: ?Sized>(
         let field = Field::new(field_name(group_root, array.path()), arrow_dtype, false);
         fields.push(field);
     }
+    // Sort fields by name for consistent ordering
+    fields.sort_by(|f1, f2| f1.name().cmp(f2.name()));
     Ok(Arc::new(Schema::new(fields)))
 }
 
@@ -109,13 +111,13 @@ mod tests {
         let schema = group_arrays_schema(&group).unwrap();
 
         let expected_fields = vec![
+            Arc::new(Field::new("bbox", DataType::Utf8View, false)),
             Arc::new(Field::new("collection", DataType::Utf8View, false)),
             Arc::new(Field::new(
                 "date",
                 DataType::Timestamp(TimeUnit::Millisecond, None),
                 false,
             )),
-            Arc::new(Field::new("bbox", DataType::Utf8View, false)),
         ];
         let expected_schema = Arc::new(Schema::new(expected_fields));
         assert_eq!(&schema, &expected_schema);
