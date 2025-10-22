@@ -1,5 +1,8 @@
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
 
+// Use patched version of zarrs-metadata
+use zarrs_metadata as _;
+
 mod table;
 
 use pyo3::prelude::*;

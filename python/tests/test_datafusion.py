@@ -10,7 +10,7 @@ def test_zarr_scan():
     ctx = SessionContext()
 
     zarr_path = ROOT_DIR / "data" / "zarr_store.zarr"
-    zarr_table = zarr_datafusion_search.ZarrTable(str(zarr_path))
+    zarr_table = zarr_datafusion_search.ZarrTable(str(zarr_path), "/meta")
 
     ctx.register_table_provider("zarr_data", zarr_table)
 
