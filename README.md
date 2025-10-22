@@ -1,4 +1,4 @@
-# zarr-datafusion-internal
+# zarr-datafusion-search
 
 This is a prototype for being able to query _metadata_ about Zarr arrays using [DataFusion](https://datafusion.apache.org/), an extensible query engine written in Rust.
 
@@ -27,7 +27,7 @@ In addition, DataFusion-Python supports [_custom table providers_](https://dataf
 > DataFusion used to compile the custom table provider.
 
 ```py
-from zarr_datafusion_internal import ZarrTable
+from zarr_datafusion_search import ZarrTable
 from datafusion import SessionContext
 
 # Create a new DataFusion session context
