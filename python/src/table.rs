@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use datafusion_ffi::table_provider::FFI_TableProvider;
+use icechunk::RepositoryConfig;
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::{PyCapsule, PyType};
@@ -23,6 +24,24 @@ impl PyZarrTable {
                 ))
             })?;
         Ok(PyZarrTable(Arc::new(table_provider)))
+    }
+
+    #[classmethod]
+    pub(crate) fn from_icechunk<'py>(
+        _cls: &Bound<'py, PyType>,
+        py: Python<'py>,
+        session: Bound<'py, PyAny>,
+        group_path: PyBackedStr,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        // icechunk::session::Session::create_readonly_session(config, storage_settings, storage, asset_manager, virtual_resolver, snapshot_id)
+        todo!()
+        // let store = store.into_dyn();
+        // future_into_py(py, async move {
+        //     let table_provider = ZarrTableProvider::new_object_store(store, &group_path)
+        //         .await
+        //         .unwrap();
+        //     Ok(Self(Arc::new(table_provider)))
+        // })
     }
 
     #[classmethod]
