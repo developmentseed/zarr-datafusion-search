@@ -20,6 +20,8 @@ crate-type = ["cdylib"]
 [dependencies]
 datafusion-ffi = "50"
 pyo3 = { version = "0.26", features = ["abi3-py39"] }
+pyo3-async-runtimes = { version = "0.26", features = ["tokio-runtime"] }
+pyo3-object_store = "0.6"
 zarr-datafusion-search = { path = "../" }
 zarrs_metadata = "0.6.1"
 

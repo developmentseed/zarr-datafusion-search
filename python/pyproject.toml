@@ -19,4 +19,10 @@ module-name = "zarr_datafusion_search._rust"
 python-source = "python"
 
 [tool.uv]
-dev-dependencies = ["ipykernel", "maturin", "pytest"]
+dev-dependencies = [
+    "ipykernel",
+    "maturin",
+    "obstore",
+    "pytest-asyncio",
+    "pytest",
+]
