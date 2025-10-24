@@ -4,21 +4,23 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-arrow = { version = "56.2.0" }
-arrow-array = { version = "56.2.0" }
-arrow-schema = { version = "56.2.0" }
-async-trait = { version = "0.1.89" }
-datafusion = { version = "50.2" }
-futures = { version = "0.3.31" }
+arrow = "56.2.0"
+arrow-array = "56.2.0"
+arrow-schema = "56.2.0"
+async-trait = "0.1.89"
+datafusion = "50.2"
+futures = "0.3.31"
 geoarrow-array = "0.6.1"
 geoarrow-schema = "0.6.1"
-object_store = { version = "0.12.4" }
+icechunk = "0.3.13"
+object_store = "0.12.4"
 thiserror = "2"
 zarrs = { version = "0.22.4", features = ["async", "chrono"] }
-zarrs_filesystem = { version = "0.3.2" }
-zarrs_object_store = { version = "0.5.0" }
-zarrs_storage = { version = "0.4.0", features = ["async"] }
+zarrs_filesystem = "0.3.2"
+zarrs_icechunk = "0.4.0"
 zarrs_metadata = "0.6.1"
+zarrs_object_store = "0.5.0"
+zarrs_storage = { version = "0.4.0", features = ["async"] }
 
 [dev-dependencies]
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }

@@ -3,6 +3,7 @@
 // Use patched version of zarrs-metadata
 use zarrs_metadata as _;
 
+mod icechunk;
 mod table;
 
 use pyo3::prelude::*;

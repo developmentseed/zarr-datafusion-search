@@ -26,6 +26,30 @@ impl PyZarrTable {
     }
 
     #[classmethod]
+    pub(crate) fn from_icechunk<'py>(
+        _cls: &Bound<'py, PyType>,
+        py: Python<'py>,
+        session: Bound<'py, PyAny>,
+        group_path: PyBackedStr,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let bytes = session
+            .getattr("_session")?
+            .call_method0("as_bytes")?
+            .extract()?;
+        let icechunk_session = icechunk::session::Session::from_bytes(bytes).unwrap();
+
+        dbg!("Created icechunk session from msgpack serialization");
+        dbg!(icechunk_session.config());
+
+        future_into_py(py, async move {
+            let table_provider = ZarrTableProvider::new_icechunk(icechunk_session, &group_path)
+                .await
+                .unwrap();
+            Ok(Self(Arc::new(table_provider)))
+        })
+    }
+
+    #[classmethod]
     pub(crate) fn from_obstore<'py>(
         _cls: &Bound<'py, PyType>,
         py: Python<'py>,
