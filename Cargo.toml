@@ -15,15 +15,19 @@ geoarrow-schema = "0.6.1"
 icechunk = "0.3.13"
 object_store = "0.12.4"
 thiserror = "2"
-zarrs = { version = "0.22.4", features = ["async", "chrono"] }
-zarrs_filesystem = "0.3.2"
+zarrs = { git = "https://github.com/LDeakin/zarrs.git", branch = "main", features = ["async", "chrono"] }
+#zarrs_filesystem = "0.3.2"
+zarrs_filesystem = { git = "https://github.com/LDeakin/zarrs.git", branch = "main"}
+#zarrs_metadata = "0.6.1"
+zarrs_metadata = { git = "https://github.com/LDeakin/zarrs.git", branch = "main"}
 zarrs_icechunk = "0.4.0"
-zarrs_metadata = "0.6.1"
-zarrs_object_store = "0.5.0"
-zarrs_storage = { version = "0.4.0", features = ["async"] }
+#zarrs_object_store = "0.5.0"
+zarrs_object_store = { git = "https://github.com/LDeakin/zarrs.git", branch = "main"} 
+#zarrs_storage = { version = "0.4.0", features = ["async"] }
+zarrs_storage = { git = "https://github.com/LDeakin/zarrs.git", branch = "main", features = ["async"] }
 
 [dev-dependencies]
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
 
-[patch.crates-io]
-zarrs_metadata = { git = "https://github.com/zarrs/zarrs", rev = "6ea0464cf50e481cbae0e89de267c7991ed65f3f" }
+#[patch.crates-io]
+#zarrs_metadata = { git = "https://github.com/zarrs/zarrs", rev = "6ea0464cf50e481cbae0e89de267c7991ed65f3f" }
