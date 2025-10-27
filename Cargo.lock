@@ -71,6 +71,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ar_archive_writer"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0c269894b6fe5e9d7ada0cf69b5bf847ff35bc25fc271f08e1d080fce80339a"
+dependencies = [
+ "object",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3427,6 +3436,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "object"
+version = "0.32.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6a622008b6e321afc04970976f62ee297fdbaa6f95318ca343e3eebb9648441"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "object_store"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3732,10 +3750,11 @@ dependencies = [
 
 [[package]]
 name = "psm"
-version = "0.1.27"
+version = "0.1.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e66fcd288453b748497d8fb18bccc83a16b0518e3906d4b8df0a8d42d93dbb1c"
+checksum = "d11f2fedc3b7dafdc2851bc52f277377c5473d378859be234bc7ebb593144d01"
 dependencies = [
+ "ar_archive_writer",
  "cc",
 ]
 
@@ -5763,13 +5782,13 @@ dependencies = [
  "zarrs_icechunk",
  "zarrs_metadata",
  "zarrs_object_store",
- "zarrs_storage 0.4.0 (git+https://github.com/LDeakin/zarrs.git?branch=main)",
+ "zarrs_storage",
 ]
 
 [[package]]
 name = "zarrs"
 version = "0.22.5"
-source = "git+https://github.com/LDeakin/zarrs.git?branch=main#b1a7a19fd249eca1edce493081aed669e6fd2463"
+source = "git+https://github.com/zarrs/zarrs?rev=b1a7a19fd249eca1edce493081aed669e6fd2463#b1a7a19fd249eca1edce493081aed669e6fd2463"
 dependencies = [
  "async-generic",
  "async-lock",
@@ -5809,14 +5828,14 @@ dependencies = [
  "zarrs_metadata_ext",
  "zarrs_plugin",
  "zarrs_registry",
- "zarrs_storage 0.4.0 (git+https://github.com/LDeakin/zarrs.git?branch=main)",
+ "zarrs_storage",
  "zstd",
 ]
 
 [[package]]
 name = "zarrs_data_type"
 version = "0.4.1"
-source = "git+https://github.com/LDeakin/zarrs.git?branch=main#b1a7a19fd249eca1edce493081aed669e6fd2463"
+source = "git+https://github.com/zarrs/zarrs?rev=b1a7a19fd249eca1edce493081aed669e6fd2463#b1a7a19fd249eca1edce493081aed669e6fd2463"
 dependencies = [
  "derive_more",
  "half",
@@ -5830,7 +5849,7 @@ dependencies = [
 [[package]]
 name = "zarrs_filesystem"
 version = "0.3.2"
-source = "git+https://github.com/LDeakin/zarrs.git?branch=main#b1a7a19fd249eca1edce493081aed669e6fd2463"
+source = "git+https://github.com/zarrs/zarrs?rev=b1a7a19fd249eca1edce493081aed669e6fd2463#b1a7a19fd249eca1edce493081aed669e6fd2463"
 dependencies = [
  "bytes",
  "derive_more",
@@ -5841,7 +5860,7 @@ dependencies = [
  "pathdiff",
  "thiserror 2.0.17",
  "walkdir",
- "zarrs_storage 0.4.0 (git+https://github.com/LDeakin/zarrs.git?branch=main)",
+ "zarrs_storage",
 ]
 
 [[package]]
@@ -5854,13 +5873,13 @@ dependencies = [
  "futures",
  "icechunk",
  "tokio",
- "zarrs_storage 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "zarrs_storage",
 ]
 
 [[package]]
 name = "zarrs_metadata"
 version = "0.6.2"
-source = "git+https://github.com/LDeakin/zarrs.git?branch=main#b1a7a19fd249eca1edce493081aed669e6fd2463"
+source = "git+https://github.com/zarrs/zarrs?rev=b1a7a19fd249eca1edce493081aed669e6fd2463#b1a7a19fd249eca1edce493081aed669e6fd2463"
 dependencies = [
  "derive_more",
  "half",
@@ -5873,7 +5892,7 @@ dependencies = [
 [[package]]
 name = "zarrs_metadata_ext"
 version = "0.2.2"
-source = "git+https://github.com/LDeakin/zarrs.git?branch=main#b1a7a19fd249eca1edce493081aed669e6fd2463"
+source = "git+https://github.com/zarrs/zarrs?rev=b1a7a19fd249eca1edce493081aed669e6fd2463#b1a7a19fd249eca1edce493081aed669e6fd2463"
 dependencies = [
  "derive_more",
  "half",
@@ -5891,18 +5910,18 @@ dependencies = [
 [[package]]
 name = "zarrs_object_store"
 version = "0.5.0"
-source = "git+https://github.com/LDeakin/zarrs.git?branch=main#b1a7a19fd249eca1edce493081aed669e6fd2463"
+source = "git+https://github.com/zarrs/zarrs?rev=b1a7a19fd249eca1edce493081aed669e6fd2463#b1a7a19fd249eca1edce493081aed669e6fd2463"
 dependencies = [
  "async-trait",
  "futures",
  "object_store",
- "zarrs_storage 0.4.0 (git+https://github.com/LDeakin/zarrs.git?branch=main)",
+ "zarrs_storage",
 ]
 
 [[package]]
 name = "zarrs_plugin"
 version = "0.2.2"
-source = "git+https://github.com/LDeakin/zarrs.git?branch=main#b1a7a19fd249eca1edce493081aed669e6fd2463"
+source = "git+https://github.com/zarrs/zarrs?rev=b1a7a19fd249eca1edce493081aed669e6fd2463#b1a7a19fd249eca1edce493081aed669e6fd2463"
 dependencies = [
  "thiserror 2.0.17",
 ]
@@ -5910,7 +5929,7 @@ dependencies = [
 [[package]]
 name = "zarrs_registry"
 version = "0.1.6"
-source = "git+https://github.com/LDeakin/zarrs.git?branch=main#b1a7a19fd249eca1edce493081aed669e6fd2463"
+source = "git+https://github.com/zarrs/zarrs?rev=b1a7a19fd249eca1edce493081aed669e6fd2463#b1a7a19fd249eca1edce493081aed669e6fd2463"
 dependencies = [
  "regex",
 ]
@@ -5918,24 +5937,7 @@ dependencies = [
 [[package]]
 name = "zarrs_storage"
 version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bc1037a8fa8c44ccb8f5c6c85753a63ddf296fb43280f28150f0f29fda8d301"
-dependencies = [
- "async-trait",
- "auto_impl",
- "bytes",
- "derive_more",
- "futures",
- "itertools",
- "parking_lot",
- "thiserror 2.0.17",
- "unsafe_cell_slice",
-]
-
-[[package]]
-name = "zarrs_storage"
-version = "0.4.0"
-source = "git+https://github.com/LDeakin/zarrs.git?branch=main#b1a7a19fd249eca1edce493081aed669e6fd2463"
+source = "git+https://github.com/zarrs/zarrs?rev=b1a7a19fd249eca1edce493081aed669e6fd2463#b1a7a19fd249eca1edce493081aed669e6fd2463"
 dependencies = [
  "async-trait",
  "auto_impl",
