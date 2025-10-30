@@ -16,18 +16,15 @@ icechunk = "0.3.13"
 object_store = "0.12.4"
 thiserror = "2"
 zarrs = { version = "0.22.5", features = ["async", "chrono"] }
-zarrs_filesystem = "0.3.2"
-zarrs_metadata = "0.6.1"
-zarrs_icechunk = "0.4.0"
+zarrs_filesystem = "0.3.3"
+zarrs_metadata = "0.6.2"
+zarrs_icechunk = "0.4.1"
 zarrs_object_store = "0.5.0"
 zarrs_storage = { version = "0.4.0", features = ["async"] }
 
 [dev-dependencies]
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
 
-[patch.crates-io]
-zarrs = { git = "https://github.com/zarrs/zarrs", rev = "b1a7a19fd249eca1edce493081aed669e6fd2463" }
-zarrs_filesystem = { git = "https://github.com/zarrs/zarrs", rev = "b1a7a19fd249eca1edce493081aed669e6fd2463" }
-zarrs_metadata = { git = "https://github.com/zarrs/zarrs", rev = "b1a7a19fd249eca1edce493081aed669e6fd2463" }
-zarrs_object_store = { git = "https://github.com/zarrs/zarrs", rev = "b1a7a19fd249eca1edce493081aed669e6fd2463" }
-zarrs_storage = { git = "https://github.com/zarrs/zarrs", rev = "b1a7a19fd249eca1edce493081aed669e6fd2463" }
+#[patch.crates-io]
+#zarrs_object_store = { git = "https://github.com/zarrs/zarrs", rev = "b1a7a19fd249eca1edce493081aed669e6fd2463" }
+#zarrs_storage = { git = "https://github.com/zarrs/zarrs", rev = "b1a7a19fd249eca1edce493081aed669e6fd2463" }

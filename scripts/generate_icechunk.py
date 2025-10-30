@@ -1,14 +1,10 @@
-import tempfile
-
+import icechunk
+import zarr
 import numpy as np
 import shapely
-import zarr
 from zarr.dtype import VariableLengthUTF8
-from zarr_datafusion_search import ZarrTable
 
-import icechunk
-
-location = tempfile.TemporaryDirectory().name
+location = "data/icechunk"
 storage = icechunk.local_filesystem_storage(location)
 repo = icechunk.Repository.create(storage)
 session = repo.writable_session("main")
@@ -42,5 +38,3 @@ meta.create_array(
 meta["bbox"][...] = bbox_data
 
 session.commit("First")
-
-table = await ZarrTable.from_icechunk(session=session, group_path="/meta")
