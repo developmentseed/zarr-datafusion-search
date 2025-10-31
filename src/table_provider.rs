@@ -51,6 +51,20 @@ impl ZarrTableProvider {
         })
     }
 
+    /// Create a new ZarrTableProvider from an Icechunk session
+    pub async fn new_icechunk(
+        icechunk_session: icechunk::session::Session,
+        group_path: &str,
+    ) -> ZarrDataFusionResult<Self> {
+        let zarr_backend = AsyncZarrBackend::new_icechunk(icechunk_session);
+        let schema = zarr_backend.infer_group_schema(group_path).await?;
+        Ok(Self {
+            schema,
+            zarr_backend: zarr_backend.into(),
+        })
+    }
+
+    /// Create a new ZarrTableProvider from an ObjectStore
     pub async fn new_object_store<T: ObjectStore>(
         store: T,
         group_path: &str,
@@ -121,6 +135,12 @@ struct AsyncZarrBackend(Arc<dyn AsyncReadableListableStorageTraits>);
 impl AsyncZarrBackend {
     fn new_object_store<T: ObjectStore>(store: T) -> Self {
         AsyncZarrBackend(Arc::new(zarrs_object_store::AsyncObjectStore::new(store)))
+    }
+
+    fn new_icechunk(icechunk_session: icechunk::session::Session) -> Self {
+        AsyncZarrBackend(Arc::new(zarrs_icechunk::AsyncIcechunkStore::new(
+            icechunk_session,
+        )))
     }
 
     async fn load_array<T: ElementOwned + MaybeSend + MaybeSync>(
