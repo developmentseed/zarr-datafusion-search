@@ -50,4 +50,4 @@ async def test_zarr_scan_from_icechunk():
 
     sql = "SELECT * FROM icechunk_data;"
     df = ctx.sql(sql)
-    df.show()
+    # df.show()

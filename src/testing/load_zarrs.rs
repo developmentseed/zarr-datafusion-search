@@ -2,6 +2,11 @@ use std::sync::Arc;
 use zarrs::array::Array;
 use zarrs::array_subset::ArraySubset;
 use zarrs_filesystem::FilesystemStore;
+use icechunk::{Repository, RepositoryConfig, repository::VersionInfo};
+use zarrs_icechunk::AsyncIcechunkStore;
+use std::collections::HashMap;
+use std::path::Path;
+
 
 #[test]
 fn test_load_collection_array() {
@@ -37,6 +42,47 @@ fn test_load_collection_array() {
     );
 }
 
+
+#[tokio::test]
+async fn test_load_collection_array_icechunk() {
+    let storage = icechunk::new_local_filesystem_storage(Path::new("data/icechunk")).await.unwrap();
+    let config = RepositoryConfig::default();
+    let repo = Repository::open(Some(config), storage, HashMap::new()).await.unwrap();
+    let version_info = VersionInfo::BranchTipRef("main".to_string());
+    let session = repo.readonly_session(&version_info).await.unwrap();
+    let store = Arc::new(AsyncIcechunkStore::new(session));
+
+    // Open the collection array from the /meta/collection path
+    let collection_array = Array::async_open(store, "/meta/collection").await.unwrap();
+
+    // Print array metadata
+    println!("Array shape: {:?}", collection_array.shape());
+    println!("Data type: {:?}", collection_array.data_type());
+
+    // Create array subset for the entire array (shape is [3])
+    let array_subset = ArraySubset::new_with_shape(collection_array.shape().to_vec());
+
+    //// Read the entire array as strings
+    let data: Vec<String> = collection_array
+        .async_retrieve_array_subset_elements(&array_subset)
+        .await
+        .unwrap();
+
+    println!("Collection array contents:");
+    for (i, item) in data.iter().enumerate() {
+        println!("  [{}]: {}", i, item);
+    }
+
+    //// Basic assertions
+    assert!(!data.is_empty(), "Collection array should not be empty");
+    assert_eq!(
+        collection_array.shape(),
+        &[3],
+        "Collection array should have 3 elements"
+    );
+}
+
+
 #[test]
 fn test_load_date_array() {
     // Create a filesystem store pointing to the zarr store
@@ -55,6 +101,47 @@ fn test_load_date_array() {
     // Read the entire array as i64 milliseconds (datetime64[ms])
     let data: Vec<i64> = date_array
         .retrieve_array_subset_elements(&array_subset)
+        .unwrap();
+
+    println!("Date array contents (milliseconds since epoch):");
+    for (i, ms) in data.iter().enumerate() {
+        println!("  [{}]: {} ms", i, ms);
+    }
+
+    // Basic assertions
+    assert!(!data.is_empty(), "Date array should not be empty");
+    assert_eq!(
+        date_array.shape(),
+        &[3],
+        "Date array should have 3 elements"
+    );
+}
+
+
+#[tokio::test]
+async fn test_load_date_array_icechunk() {
+
+    let storage = icechunk::new_local_filesystem_storage(Path::new("data/icechunk")).await.unwrap();
+    let config = RepositoryConfig::default();
+    let repo = Repository::open(Some(config), storage, HashMap::new()).await.unwrap();
+    let version_info = VersionInfo::BranchTipRef("main".to_string());
+    let session = repo.readonly_session(&version_info).await.unwrap();
+    let store = Arc::new(AsyncIcechunkStore::new(session));
+
+    // Open the date array from the /meta/date path
+    let date_array = Array::async_open(store, "/meta/date").await.unwrap();
+
+    // Print array metadata
+    println!("Array shape: {:?}", date_array.shape());
+    println!("Data type: {:?}", date_array.data_type());
+
+    // Create array subset for the entire array (shape is [3])
+    let array_subset = ArraySubset::new_with_shape(date_array.shape().to_vec());
+
+    // Read the entire array as i64 milliseconds (datetime64[ms])
+    let data: Vec<i64> = date_array
+        .async_retrieve_array_subset_elements(&array_subset)
+        .await
         .unwrap();
 
     println!("Date array contents (milliseconds since epoch):");
