@@ -130,6 +130,8 @@ impl SyncZarrBackend {
     }
 }
 
+// TODO: Have an icechunk backend that stores both the icechunk session **and** the tokio runtime. Then we can ensure that loading data always happens within the correct runtime context.
+
 #[derive(Clone)]
 struct AsyncZarrBackend(Arc<dyn AsyncReadableListableStorageTraits>);
 
