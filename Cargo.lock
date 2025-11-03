@@ -5915,7 +5915,8 @@ dependencies = [
 [[package]]
 name = "zarrs_object_store"
 version = "0.5.0"
-source = "git+https://github.com/zarrs/zarrs?rev=b1a7a19fd249eca1edce493081aed669e6fd2463#b1a7a19fd249eca1edce493081aed669e6fd2463"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5d9d0d3db426dd50dfb0b5d7cc1660bda368caeb5cd8645c60c46bc4f261a19"
 dependencies = [
  "async-trait",
  "futures",
@@ -5944,7 +5945,8 @@ dependencies = [
 [[package]]
 name = "zarrs_storage"
 version = "0.4.0"
-source = "git+https://github.com/zarrs/zarrs?rev=b1a7a19fd249eca1edce493081aed669e6fd2463#b1a7a19fd249eca1edce493081aed669e6fd2463"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bc1037a8fa8c44ccb8f5c6c85753a63ddf296fb43280f28150f0f29fda8d301"
 dependencies = [
  "async-trait",
  "auto_impl",
