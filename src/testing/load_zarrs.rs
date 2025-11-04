@@ -1,12 +1,11 @@
+use icechunk::{Repository, RepositoryConfig, repository::VersionInfo};
+use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 use zarrs::array::Array;
 use zarrs::array_subset::ArraySubset;
 use zarrs_filesystem::FilesystemStore;
-use icechunk::{Repository, RepositoryConfig, repository::VersionInfo};
 use zarrs_icechunk::AsyncIcechunkStore;
-use std::collections::HashMap;
-use std::path::Path;
-
 
 #[test]
 fn test_load_collection_array() {
@@ -42,12 +41,15 @@ fn test_load_collection_array() {
     );
 }
 
-
 #[tokio::test]
 async fn test_load_collection_array_icechunk() {
-    let storage = icechunk::new_local_filesystem_storage(Path::new("data/icechunk")).await.unwrap();
+    let storage = icechunk::new_local_filesystem_storage(Path::new("data/icechunk"))
+        .await
+        .unwrap();
     let config = RepositoryConfig::default();
-    let repo = Repository::open(Some(config), storage, HashMap::new()).await.unwrap();
+    let repo = Repository::open(Some(config), storage, HashMap::new())
+        .await
+        .unwrap();
     let version_info = VersionInfo::BranchTipRef("main".to_string());
     let session = repo.readonly_session(&version_info).await.unwrap();
     let store = Arc::new(AsyncIcechunkStore::new(session));
@@ -81,7 +83,6 @@ async fn test_load_collection_array_icechunk() {
         "Collection array should have 3 elements"
     );
 }
-
 
 #[test]
 fn test_load_date_array() {
@@ -117,13 +118,15 @@ fn test_load_date_array() {
     );
 }
 
-
 #[tokio::test]
 async fn test_load_date_array_icechunk() {
-
-    let storage = icechunk::new_local_filesystem_storage(Path::new("data/icechunk")).await.unwrap();
+    let storage = icechunk::new_local_filesystem_storage(Path::new("data/icechunk"))
+        .await
+        .unwrap();
     let config = RepositoryConfig::default();
-    let repo = Repository::open(Some(config), storage, HashMap::new()).await.unwrap();
+    let repo = Repository::open(Some(config), storage, HashMap::new())
+        .await
+        .unwrap();
     let version_info = VersionInfo::BranchTipRef("main".to_string());
     let session = repo.readonly_session(&version_info).await.unwrap();
     let store = Arc::new(AsyncIcechunkStore::new(session));

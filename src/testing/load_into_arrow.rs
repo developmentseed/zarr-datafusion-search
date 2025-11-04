@@ -3,15 +3,14 @@ use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use geoarrow_array::GeoArrowArray;
 use geoarrow_array::array::WktArray;
 use geoarrow_schema::Crs;
+use icechunk::{Repository, RepositoryConfig, repository::VersionInfo};
+use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 use zarrs::array::Array;
 use zarrs::array_subset::ArraySubset;
 use zarrs_filesystem::FilesystemStore;
-use icechunk::{Repository, RepositoryConfig, repository::VersionInfo};
 use zarrs_icechunk::AsyncIcechunkStore;
-use std::collections::HashMap;
-use std::path::Path;
-
 
 #[test]
 fn test_load_zarrs_into_arrow_record_batch() {
@@ -102,18 +101,23 @@ fn test_load_zarrs_into_arrow_record_batch() {
     assert_eq!(date_col.value(2), 1672704000000);
 }
 
-
 #[tokio::test]
 async fn test_load_zarrs_into_arrow_record_batch_icechunk() {
-    let storage = icechunk::new_local_filesystem_storage(Path::new("data/icechunk")).await.unwrap();
+    let storage = icechunk::new_local_filesystem_storage(Path::new("data/icechunk"))
+        .await
+        .unwrap();
     let config = RepositoryConfig::default();
-    let repo = Repository::open(Some(config), storage, HashMap::new()).await.unwrap();
+    let repo = Repository::open(Some(config), storage, HashMap::new())
+        .await
+        .unwrap();
     let version_info = VersionInfo::BranchTipRef("main".to_string());
     let session = repo.readonly_session(&version_info).await.unwrap();
     let store = Arc::new(AsyncIcechunkStore::new(session));
 
     // Load collection array (strings)
-    let collection_array = Array::async_open(store.clone(), "/meta/collection").await.unwrap();
+    let collection_array = Array::async_open(store.clone(), "/meta/collection")
+        .await
+        .unwrap();
 
     let collection_subset = ArraySubset::new_with_shape(collection_array.shape().to_vec());
     let collection_data: Vec<String> = collection_array
@@ -122,7 +126,9 @@ async fn test_load_zarrs_into_arrow_record_batch_icechunk() {
         .unwrap();
 
     // Load date array (datetime64[ms])
-    let date_array = Array::async_open(store.clone(), "/meta/date").await.unwrap();
+    let date_array = Array::async_open(store.clone(), "/meta/date")
+        .await
+        .unwrap();
     let date_subset = ArraySubset::new_with_shape(date_array.shape().to_vec());
     let date_data: Vec<i64> = date_array
         .async_retrieve_array_subset_elements(&date_subset)
@@ -130,7 +136,9 @@ async fn test_load_zarrs_into_arrow_record_batch_icechunk() {
         .unwrap();
 
     // Load bbox array (strings representing WKT geometries)
-    let bbox_array = Array::async_open(store.clone(), "/meta/bbox").await.unwrap();
+    let bbox_array = Array::async_open(store.clone(), "/meta/bbox")
+        .await
+        .unwrap();
     let bbox_subset = ArraySubset::new_with_shape(bbox_array.shape().to_vec());
     let bbox_data: Vec<String> = bbox_array
         .async_retrieve_array_subset_elements(&bbox_subset)
