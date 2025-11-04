@@ -4,7 +4,7 @@ use datafusion_ffi::table_provider::FFI_TableProvider;
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::{PyCapsule, PyType};
-use pyo3_async_runtimes::tokio::future_into_py;
+use pyo3_async_runtimes::tokio::{future_into_py, get_runtime};
 use pyo3_object_store::AnyObjectStore;
 use zarr_datafusion_search::table_provider::ZarrTableProvider;
 
@@ -30,7 +30,7 @@ impl PyZarrTable {
         _cls: &Bound<'py, PyType>,
         py: Python<'py>,
         session: Bound<'py, PyAny>,
-        group_path: PyBackedStr,
+        group_path: String,
     ) -> PyResult<Bound<'py, PyAny>> {
         let bytes = session
             .getattr("_session")?
@@ -41,10 +41,16 @@ impl PyZarrTable {
         dbg!("Created icechunk session from msgpack serialization");
         dbg!(icechunk_session.config());
 
+        let runtime = get_runtime();
+
         future_into_py(py, async move {
-            let table_provider = ZarrTableProvider::new_icechunk(icechunk_session, &group_path)
-                .await
-                .unwrap();
+            let table_provider = ZarrTableProvider::new_icechunk(
+                icechunk_session,
+                runtime.handle().clone(),
+                group_path,
+            )
+            .await
+            .unwrap();
             Ok(Self(Arc::new(table_provider)))
         })
     }

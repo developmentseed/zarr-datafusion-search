@@ -6143,6 +6143,7 @@ dependencies = [
  "icechunk",
  "object_store",
  "thiserror 2.0.17",
+ "tokio",
  "zarrs",
  "zarrs_filesystem",
  "zarrs_icechunk",

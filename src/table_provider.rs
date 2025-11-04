@@ -359,33 +359,11 @@ impl ExecutionPlan for ZarrExec {
     ) -> Result<SendableRecordBatchStream> {
         let backend = self.zarr_backend.clone();
         let stream_schema = self.schema.clone();
-
         let stream = RecordBatchStreamAdapter::new(
             self.schema.clone(),
-            futures::stream::once(async move {
-                let tokio_handle = tokio::runtime::Handle::current();
-                let x = tokio_handle
-                    .spawn(async move { backend.load_record_batch(stream_schema).await })
-                    .await
-                    .map_err(|e| datafusion::error::DataFusionError::External(Box::new(e)))?;
-                Ok(x?)
-
-                // // Try to use current Tokio runtime, or create a new one if needed
-                // let result = if let Ok(handle) = tokio::runtime::Handle::try_current() {
-                //     // We're already in a Tokio runtime context
-                //     handle
-                //         .spawn(async move { backend.load_record_batch(stream_schema).await })
-                //         .await
-                //         .map_err(|e| datafusion::error::DataFusionError::External(Box::new(e)))?
-                // } else {
-                //     // No runtime available, create a new one
-                //     tokio::runtime::Runtime::new()
-                //         .map_err(|e| datafusion::error::DataFusionError::External(Box::new(e)))?
-                //         .block_on(async move { backend.load_record_batch(stream_schema).await })
-                // };
-
-                // Ok(result?)
-            }),
+            futures::stream::once(
+                async move { Ok(backend.load_record_batch(stream_schema).await?) },
+            ),
         );
         Ok(Box::pin(stream))
     }
