@@ -25,7 +25,3 @@ zarrs_storage = { version = "0.4.0", features = ["async"] }
 
 [dev-dependencies]
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
-
-#[patch.crates-io]
-#zarrs_object_store = { git = "https://github.com/zarrs/zarrs", rev = "b1a7a19fd249eca1edce493081aed669e6fd2463" }
-#zarrs_storage = { git = "https://github.com/zarrs/zarrs", rev = "b1a7a19fd249eca1edce493081aed669e6fd2463" }
