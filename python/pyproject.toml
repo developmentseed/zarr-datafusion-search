@@ -4,8 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "zarr_datafusion_search"
-requires-python = ">=3.9"
-dependencies = ["datafusion"]
+requires-python = ">=3.10"
+dependencies = ["datafusion~=50.1"]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
@@ -20,9 +20,11 @@ python-source = "python"
 
 [tool.uv]
 dev-dependencies = [
+    "icechunk; python_version >= '3.11'",
     "ipykernel",
     "maturin",
     "obstore",
     "pytest-asyncio",
     "pytest",
+    "shapely",
 ]
