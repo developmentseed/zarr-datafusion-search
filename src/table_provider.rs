@@ -20,14 +20,16 @@ use object_store::ObjectStore;
 use std::any::Any;
 use std::fmt::{self, Debug};
 use std::sync::Arc;
+use tokio::runtime::Handle;
 use zarrs::array::{Array, ElementOwned};
 use zarrs::array_subset::ArraySubset;
 use zarrs::group::Group;
 use zarrs::storage::{AsyncReadableListableStorageTraits, ReadableListableStorageTraits};
 use zarrs_filesystem::{FilesystemStore, FilesystemStoreCreateError};
+use zarrs_icechunk::AsyncIcechunkStore;
 use zarrs_storage::{MaybeSend, MaybeSync};
 
-use crate::error::ZarrDataFusionResult;
+use crate::error::{ZarrDataFusionError, ZarrDataFusionResult};
 use crate::schema::{group_arrays_schema, group_arrays_schema_async};
 
 /// A simple DataFusion table provider that loads data from a Zarr store
@@ -54,10 +56,11 @@ impl ZarrTableProvider {
     /// Create a new ZarrTableProvider from an Icechunk session
     pub async fn new_icechunk(
         icechunk_session: icechunk::session::Session,
-        group_path: &str,
+        handle: Handle,
+        group_path: impl Into<String>,
     ) -> ZarrDataFusionResult<Self> {
-        let zarr_backend = AsyncZarrBackend::new_icechunk(icechunk_session);
-        let schema = zarr_backend.infer_group_schema(group_path).await?;
+        let zarr_backend = IcechunkBackend::new(icechunk_session, handle);
+        let schema = zarr_backend.infer_group_schema(group_path.into()).await?;
         // dbg!(schema.as_ref());
         Ok(Self {
             schema,
@@ -133,6 +136,48 @@ impl SyncZarrBackend {
 // TODO: Have an icechunk backend that stores both the icechunk session **and** the tokio runtime. Then we can ensure that loading data always happens within the correct runtime context.
 
 #[derive(Clone)]
+struct IcechunkBackend {
+    store: Arc<dyn AsyncReadableListableStorageTraits>,
+    handle: Handle,
+}
+
+impl IcechunkBackend {
+    fn new(session: icechunk::session::Session, handle: Handle) -> Self {
+        let store = Arc::new(AsyncIcechunkStore::new(session));
+        Self { store, handle }
+    }
+
+    async fn load_array<T: ElementOwned + MaybeSend + MaybeSync + 'static>(
+        &self,
+        path: String,
+    ) -> ZarrDataFusionResult<Vec<T>> {
+        let store = self.store.clone();
+        self.handle
+            .spawn(async move {
+                let array = Array::async_open(store.clone(), path.as_ref()).await?;
+                let full_subset = ArraySubset::new_with_shape(array.shape().to_vec());
+                let out = array
+                    .async_retrieve_array_subset_elements(&full_subset)
+                    .await?;
+                Ok::<_, ZarrDataFusionError>(out)
+            })
+            .await
+            .map_err(|e| datafusion::error::DataFusionError::External(Box::new(e)))?
+    }
+
+    async fn infer_group_schema(&self, group_path: String) -> ZarrDataFusionResult<SchemaRef> {
+        let store = self.store.clone();
+        self.handle
+            .spawn(async move {
+                let group = Group::async_open(store.clone(), &group_path).await?;
+                group_arrays_schema_async(&group).await
+            })
+            .await
+            .map_err(|e| datafusion::error::DataFusionError::External(Box::new(e)))?
+    }
+}
+
+#[derive(Clone)]
 struct AsyncZarrBackend(Arc<dyn AsyncReadableListableStorageTraits>);
 
 impl AsyncZarrBackend {
@@ -140,17 +185,11 @@ impl AsyncZarrBackend {
         AsyncZarrBackend(Arc::new(zarrs_object_store::AsyncObjectStore::new(store)))
     }
 
-    fn new_icechunk(icechunk_session: icechunk::session::Session) -> Self {
-        AsyncZarrBackend(Arc::new(zarrs_icechunk::AsyncIcechunkStore::new(
-            icechunk_session,
-        )))
-    }
-
-    async fn load_array<T: ElementOwned + MaybeSend + MaybeSync>(
+    async fn load_array<T: ElementOwned + MaybeSend + MaybeSync, S: AsRef<str>>(
         &self,
-        path: &str,
+        path: S,
     ) -> ZarrDataFusionResult<Vec<T>> {
-        let array = Array::async_open(self.0.clone(), path).await?;
+        let array = Array::async_open(self.0.clone(), path.as_ref()).await?;
         let full_subset = ArraySubset::new_with_shape(array.shape().to_vec());
         Ok(array
             .async_retrieve_array_subset_elements(&full_subset)
@@ -166,6 +205,7 @@ impl AsyncZarrBackend {
 #[derive(Clone)]
 enum ZarrBackend {
     Async(AsyncZarrBackend),
+    Icechunk(IcechunkBackend),
     Sync(SyncZarrBackend),
 }
 
@@ -173,6 +213,7 @@ impl Debug for ZarrBackend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ZarrBackend::Async(_) => write!(f, "ZarrBackend::Async"),
+            ZarrBackend::Icechunk(_) => write!(f, "ZarrBackend::Icechunk"),
             ZarrBackend::Sync(_) => write!(f, "ZarrBackend::Sync"),
         }
     }
@@ -181,6 +222,12 @@ impl Debug for ZarrBackend {
 impl From<AsyncZarrBackend> for ZarrBackend {
     fn from(async_backend: AsyncZarrBackend) -> Self {
         ZarrBackend::Async(async_backend)
+    }
+}
+
+impl From<IcechunkBackend> for ZarrBackend {
+    fn from(icechunk_backend: IcechunkBackend) -> Self {
+        ZarrBackend::Icechunk(icechunk_backend)
     }
 }
 
@@ -203,12 +250,15 @@ impl ZarrBackend {
     //     )))
     // }
 
-    async fn load_array<T: ElementOwned + MaybeSend + MaybeSync>(
+    async fn load_array<T: ElementOwned + MaybeSend + MaybeSync + 'static>(
         &self,
         path: &str,
     ) -> ZarrDataFusionResult<Vec<T>> {
         match self {
             ZarrBackend::Sync(sync_backend) => sync_backend.load_array(path),
+            ZarrBackend::Icechunk(icechunk_backend) => {
+                icechunk_backend.load_array(path.to_string()).await
+            }
             ZarrBackend::Async(async_backend) => async_backend.load_array(path).await,
         }
     }

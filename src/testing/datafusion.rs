@@ -5,6 +5,7 @@ use std::sync::Arc;
 use datafusion::prelude::SessionContext;
 use icechunk::repository::VersionInfo;
 use icechunk::{Repository, RepositoryConfig};
+use tokio::runtime::Handle;
 
 use crate::table_provider::ZarrTableProvider;
 
@@ -27,7 +28,7 @@ async fn test_datafusion() {
     // Add icechunk session
     let icechunk_session = create_icechunk_table_provider().await;
     let table_provider = Arc::new(
-        ZarrTableProvider::new_icechunk(icechunk_session, "/meta")
+        ZarrTableProvider::new_icechunk(icechunk_session, Handle::current(), "/meta")
             .await
             .unwrap(),
     );
