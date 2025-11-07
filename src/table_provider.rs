@@ -1,5 +1,11 @@
-use arrow_array::{ArrayRef, RecordBatch, StringViewArray, TimestampMillisecondArray};
-use arrow_schema::SchemaRef;
+use arrow_array::{
+    ArrayRef, BinaryArray, BinaryViewArray, BooleanArray, Float32Array, Float64Array, Int8Array,
+    Int16Array, Int32Array, Int64Array, LargeBinaryArray, LargeStringArray, RecordBatch,
+    StringArray, StringViewArray, TimestampMicrosecondArray, TimestampMillisecondArray,
+    TimestampNanosecondArray, TimestampSecondArray, UInt8Array, UInt16Array, UInt32Array,
+    UInt64Array,
+};
+use arrow_schema::{DataType, Field, SchemaRef, TimeUnit};
 use async_trait::async_trait;
 use datafusion::catalog::Session;
 use datafusion::datasource::{TableProvider, TableType};
@@ -13,9 +19,6 @@ use datafusion::physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionPlan, Partitioning, PlanProperties,
     SendableRecordBatchStream,
 };
-use geoarrow_array::GeoArrowArray;
-use geoarrow_array::array::WktViewArray;
-use geoarrow_schema::Crs;
 use object_store::ObjectStore;
 use std::any::Any;
 use std::fmt::{self, Debug};
@@ -133,8 +136,6 @@ impl SyncZarrBackend {
     }
 }
 
-// TODO: Have an icechunk backend that stores both the icechunk session **and** the tokio runtime. Then we can ensure that loading data always happens within the correct runtime context.
-
 #[derive(Clone)]
 struct IcechunkBackend {
     store: Arc<dyn AsyncReadableListableStorageTraits>,
@@ -238,18 +239,6 @@ impl From<SyncZarrBackend> for ZarrBackend {
 }
 
 impl ZarrBackend {
-    // fn new_filesystem<P: AsRef<std::path::Path>>(
-    //     base_path: P,
-    // ) -> Result<Self, FilesystemStoreCreateError> {
-    //     Ok(Self::Sync(SyncZarrBackend::new_filesystem(base_path)?))
-    // }
-
-    // fn new_object_store<T: ObjectStore>(store: T) -> Self {
-    //     Self::Async(AsyncZarrBackend(Arc::new(
-    //         zarrs_object_store::AsyncObjectStore::new(store),
-    //     )))
-    // }
-
     async fn load_array<T: ElementOwned + MaybeSend + MaybeSync + 'static>(
         &self,
         path: &str,
@@ -263,36 +252,123 @@ impl ZarrBackend {
         }
     }
 
+    async fn load_array_given_field(&self, field: &Field) -> ZarrDataFusionResult<ArrayRef> {
+        // Note: we don't need to check for extension type information here, because we're only
+        // loading the physical data, and the metadata is already held in the schema.
+
+        // TODO: refactor so this can be stored in the ZarrBackend
+        let group = "/meta/";
+        let name = field.name();
+        let path = format!("{group}/{name}");
+
+        match field.data_type() {
+            DataType::Boolean => {
+                let data: Vec<bool> = self.load_array(&path).await?;
+                Ok(Arc::new(BooleanArray::from(data)))
+            }
+            DataType::Int8 => {
+                let data: Vec<i8> = self.load_array(&path).await?;
+                Ok(Arc::new(Int8Array::from(data)))
+            }
+            DataType::Int16 => {
+                let data: Vec<i16> = self.load_array(&path).await?;
+                Ok(Arc::new(Int16Array::from(data)))
+            }
+            DataType::Int32 => {
+                let data: Vec<i32> = self.load_array(&path).await?;
+                Ok(Arc::new(Int32Array::from(data)))
+            }
+            DataType::Int64 => {
+                let data: Vec<i64> = self.load_array(&path).await?;
+                Ok(Arc::new(Int64Array::from(data)))
+            }
+            DataType::UInt8 => {
+                let data: Vec<u8> = self.load_array(&path).await?;
+                Ok(Arc::new(UInt8Array::from(data)))
+            }
+            DataType::UInt16 => {
+                let data: Vec<u16> = self.load_array(&path).await?;
+                Ok(Arc::new(UInt16Array::from(data)))
+            }
+            DataType::UInt32 => {
+                let data: Vec<u32> = self.load_array(&path).await?;
+                Ok(Arc::new(UInt32Array::from(data)))
+            }
+            DataType::UInt64 => {
+                let data: Vec<u64> = self.load_array(&path).await?;
+                Ok(Arc::new(UInt64Array::from(data)))
+            }
+            // DataType::Float16 => {
+            //     let data: Vec<f16> = self.load_array(&path).await?;
+            //     Ok(Arc::new(Float16Array::from(data)))
+            // }
+            DataType::Float32 => {
+                let data: Vec<f32> = self.load_array(&path).await?;
+                Ok(Arc::new(Float32Array::from(data)))
+            }
+            DataType::Float64 => {
+                let data: Vec<f64> = self.load_array(&path).await?;
+                Ok(Arc::new(Float64Array::from(data)))
+            }
+            DataType::Binary => {
+                let data: Vec<Vec<u8>> = self.load_array(&path).await?;
+                let refs: Vec<&[u8]> = data.iter().map(|v| v.as_slice()).collect();
+                Ok(Arc::new(BinaryArray::from(refs)))
+            }
+            DataType::LargeBinary => {
+                let data: Vec<Vec<u8>> = self.load_array(&path).await?;
+                let refs: Vec<&[u8]> = data.iter().map(|v| v.as_slice()).collect();
+                Ok(Arc::new(LargeBinaryArray::from(refs)))
+            }
+            DataType::BinaryView => {
+                let data: Vec<Vec<u8>> = self.load_array(&path).await?;
+                let refs: Vec<&[u8]> = data.iter().map(|v| v.as_slice()).collect();
+                Ok(Arc::new(BinaryViewArray::from(refs)))
+            }
+            DataType::Utf8 => {
+                let data: Vec<String> = self.load_array(&path).await?;
+                Ok(Arc::new(StringArray::from(data)))
+            }
+            DataType::LargeUtf8 => {
+                let data: Vec<String> = self.load_array(&path).await?;
+                Ok(Arc::new(LargeStringArray::from(data)))
+            }
+            DataType::Utf8View => {
+                let data: Vec<String> = self.load_array(&path).await?;
+                Ok(Arc::new(StringViewArray::from(data)))
+            }
+            DataType::Timestamp(unit, _) => match unit {
+                TimeUnit::Millisecond => {
+                    let data: Vec<i64> = self.load_array(&path).await?;
+                    Ok(Arc::new(TimestampMillisecondArray::from(data)))
+                }
+                TimeUnit::Microsecond => {
+                    let data: Vec<i64> = self.load_array(&path).await?;
+                    Ok(Arc::new(TimestampMicrosecondArray::from(data)))
+                }
+                TimeUnit::Nanosecond => {
+                    let data: Vec<i64> = self.load_array(&path).await?;
+                    Ok(Arc::new(TimestampNanosecondArray::from(data)))
+                }
+                TimeUnit::Second => {
+                    let data: Vec<i64> = self.load_array(&path).await?;
+                    Ok(Arc::new(TimestampSecondArray::from(data)))
+                }
+            },
+            _ => Err(ZarrDataFusionError::Custom(format!(
+                "Unsupported Arrow data type: {:?}",
+                field.data_type()
+            ))),
+        }
+    }
+
     async fn load_record_batch(self, schema: SchemaRef) -> ZarrDataFusionResult<RecordBatch> {
-        let collection_data: Vec<String> = self.load_array("/meta/collection").await?;
-        let date_data: Vec<i64> = self.load_array("/meta/date").await?;
-        let bbox_data: Vec<String> = self.load_array("/meta/bbox").await?;
+        let mut arrays = vec![];
+        for field in schema.fields() {
+            arrays.push(self.load_array_given_field(field).await?);
+        }
 
-        // Create Arrow arrays from the loaded data
-        let collection_arrow: ArrayRef = Arc::new(StringViewArray::from(collection_data));
-        let date_arrow: ArrayRef = Arc::new(TimestampMillisecondArray::from(date_data));
-        let wkt_crs = Crs::from_authority_code("EPSG:4326".to_string());
-        let wkt_metadata = Arc::new(geoarrow_schema::Metadata::new(wkt_crs, None));
-        let wkt_arrow = WktViewArray::new(bbox_data.into(), wkt_metadata);
-
-        let columns = schema
-            .fields()
-            .iter()
-            .map(|field| match field.name().as_str() {
-                "collection" => collection_arrow.clone(),
-                "date" => date_arrow.clone(),
-                "bbox" => wkt_arrow.clone().into_array_ref(),
-                _ => panic!("Unexpected field name: {}", field.name()),
-            })
-            .collect();
-
-        // Create the RecordBatch
-        let record_batch = RecordBatch::try_new(schema.clone(), columns)?;
-
-        // dbg!(&record_batch);
-        // dbg!("equal?", schema.as_ref() == record_batch.schema().as_ref());
-
-        Ok(record_batch)
+        Ok(RecordBatch::try_new(schema.clone(), arrays)?)
     }
 }
 
