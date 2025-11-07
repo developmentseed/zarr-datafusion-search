@@ -10,7 +10,6 @@ arrow-schema = "56.2.0"
 async-trait = "0.1.89"
 datafusion = "50.2"
 futures = "0.3.31"
-geoarrow-array = "0.6.1"
 geoarrow-schema = "0.6.1"
 icechunk = "0.3.13"
 object_store = "0.12.4"
@@ -24,4 +23,5 @@ zarrs_object_store = "0.5.0"
 zarrs_storage = { version = "0.4.0", features = ["async"] }
 
 [dev-dependencies]
+geoarrow-array = "0.6.1"
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }

@@ -64,7 +64,6 @@ impl ZarrTableProvider {
     ) -> ZarrDataFusionResult<Self> {
         let zarr_backend = IcechunkBackend::new(icechunk_session, handle);
         let schema = zarr_backend.infer_group_schema(group_path.into()).await?;
-        // dbg!(schema.as_ref());
         Ok(Self {
             schema,
             zarr_backend: zarr_backend.into(),
@@ -257,7 +256,7 @@ impl ZarrBackend {
         // loading the physical data, and the metadata is already held in the schema.
 
         // TODO: refactor so this can be stored in the ZarrBackend
-        let group = "/meta/";
+        let group = "/meta";
         let name = field.name();
         let path = format!("{group}/{name}");
 
