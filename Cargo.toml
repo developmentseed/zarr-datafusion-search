@@ -11,8 +11,7 @@ async-trait = "0.1.89"
 datafusion = "50.2"
 futures = "0.3.31"
 geoarrow-schema = "0.6.1"
-#icechunk = "0.3.13"
-icechunk = {path = "/Users/seanharkins/projects/icechunk/icechunk"}
+icechunk = "0.3.16"
 object_store = "0.12.4"
 thiserror = "2"
 tokio = "1.48"
@@ -26,7 +25,3 @@ zarrs_storage = { version = "0.4.0", features = ["async"] }
 [dev-dependencies]
 geoarrow-array = "0.6.1"
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
-
-
-[patch.crates-io]
-icechunk = { path = "/Users/seanharkins/projects/icechunk/icechunk" }
