@@ -19,7 +19,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 datafusion-ffi = "50"
-icechunk = "0.3.13"
+#icechunk = "0.3.13"
+icechunk = {path = "/Users/seanharkins/projects/icechunk/icechunk"}
 pyo3 = { version = "0.26", features = ["abi3-py39"] }
 pyo3-async-runtimes = { version = "0.26", features = ["tokio-runtime"] }
 pyo3-object_store = "0.6"
@@ -28,3 +29,6 @@ zarrs_metadata = "0.6.1"
 
 [patch.crates-io]
 zarrs_metadata = { git = "https://github.com/zarrs/zarrs", rev = "b1a7a19fd249eca1edce493081aed669e6fd2463" }
+icechunk = { path = "/Users/seanharkins/projects/icechunk/icechunk" }
+
+
