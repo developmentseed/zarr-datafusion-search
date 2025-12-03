@@ -4,12 +4,14 @@ This is a prototype for being able to query _metadata_ about Zarr arrays using [
 
 ## Zarr Schema
 
-In particular, we assume there is a Zarr store with multiple 1-dimensional arrays:
+In particular, we assume there is a Zarr store with multiple 1-dimensional arrays in root group named `"meta"`.
+
+Users can define arbitrary schemas where the 1-dimensional arrays each use a `dtype` that has an equivalent Arrow type in our supported [mappings](https://github.com/developmentseed/zarr-datafusion-search/issues/12).  A concrete example would look like
 
 - Inside a Zarr group named `"meta"`
-    - An array named `"date"` with `n` timestamps, stored as a numpy `datetime64[ms]` array
-    - An array named `"collection"` with `n` string values, stored as a `VariableLengthUTF8` array
-    - An array named `"bbox"` with `n` string values, stored as a `VariableLengthUTF8` array, where each string is a WKT-encoded Polygon (or MultiPolygon) with the bounding box of that Zarr record.
+    - A `datetime64[ms]` array named `"date"` with `n` timestamps named `"date"` with `n` timestamps.
+    - A `VariableLengthUTF8` array named `"collection"` with `n` string values.
+    - A `VariableLengthUTF8` array named `"bbox"` with `n` string values, stored as a `VariableLengthUTF8` array, where each string is a WKT-encoded Polygon (or MultiPolygon) with the bounding box of that Zarr record.
 
         In the future, we will likely use a binary encoding like WKB, but Zarr's binary dtype is [not currently well-specified](https://github.com/zarr-developers/zarr-python/issues/3517).
 
