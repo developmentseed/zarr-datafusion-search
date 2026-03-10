@@ -2,7 +2,7 @@
   "shape": [
     3
   ],
-  "data_type": "string",
+  "data_type": "variable_length_bytes",
   "chunk_grid": {
     "name": "regular",
     "configuration": {
@@ -20,7 +20,7 @@
   "fill_value": "",
   "codecs": [
     {
-      "name": "vlen-utf8",
+      "name": "vlen-bytes",
       "configuration": {}
     },
     {
