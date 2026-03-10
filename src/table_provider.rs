@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use datafusion::catalog::Session;
 use datafusion::datasource::{TableProvider, TableType};
 use datafusion::error::Result;
+use datafusion::prelude::SessionContext;
 use datafusion::execution::TaskContext;
 use datafusion::logical_expr::Expr;
 use datafusion::physical_expr::EquivalenceProperties;
@@ -34,6 +35,12 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::error::{ZarrDataFusionError, ZarrDataFusionResult};
 use crate::schema::{group_arrays_schema, group_arrays_schema_async};
+
+
+pub fn register_spatial_functions(ctx: &SessionContext) -> Result<()> {
+    geodatafusion::register(ctx);
+    Ok(())
+}
 
 /// A simple DataFusion table provider that loads data from a Zarr store
 #[derive(Debug)]
@@ -506,5 +513,145 @@ mod tests {
             .downcast_ref::<StringViewArray>()
             .unwrap();
         assert_eq!(collection_col.value(0), "collection_a");
+    }
+
+    /// Test that ST_Intersects correctly selects records that intersect with the query geometry.
+    #[tokio::test]
+    async fn test_st_intersects_selects_matching_record() {
+
+        use arrow_array::Array;
+
+        let ctx = SessionContext::new();
+
+        register_spatial_functions(&ctx).expect("Failed to register spatial functions");
+
+        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr", "/meta")
+            .expect("Failed to create table provider");
+        ctx.register_table("zarr_data", Arc::new(provider))
+            .expect("Failed to register table");
+
+        // Query with a polygon that intersects collection_a
+        // The query box (0,0) to (5,5) is within collection_a's bbox (-10,-10) to (10,10)
+        let sql = "
+            SELECT collection FROM zarr_data
+            WHERE ST_Intersects(
+                bbox,
+                ST_GeomFromText('POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))')
+            )
+            ORDER BY collection
+        ";
+
+        let df = ctx.sql(sql).await.expect("Failed to execute query");
+        let batches = df.collect().await.expect("Failed to collect results");
+
+        // Should return at least collection_a (and possibly b, c since they also contain this area)
+        assert!(!batches.is_empty(), "Query should return results");
+        assert!(batches[0].num_rows() > 0, "Should have at least one matching row");
+
+        let collection_col = batches[0]
+            .column_by_name("collection")
+            .expect("collection column should exist");
+
+        let collection_array = collection_col
+            .as_any()
+            .downcast_ref::<StringViewArray>()
+            .expect("collection should be StringViewArray");
+
+        let collections: Vec<&str> = (0..collection_array.len())
+            .map(|i| collection_array.value(i))
+            .collect();
+
+        assert!(
+            collections.contains(&"collection_a"),
+            "collection_a should intersect with query box at (0,0) to (5,5)"
+        );
+    }
+
+    /// Test that ST_Intersects correctly returns no records when query geometry doesn't intersect.
+    #[tokio::test]
+    async fn test_st_intersects_no_match() {
+
+        let ctx = SessionContext::new();
+
+        register_spatial_functions(&ctx).expect("Failed to register spatial functions");
+
+        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr", "/meta")
+            .expect("Failed to create table provider");
+        ctx.register_table("zarr_data", Arc::new(provider))
+            .expect("Failed to register table");
+
+        // Query with a polygon that doesn't intersect any of the test data
+        // The query box (100,100) to (110,110) is far from all test bboxes
+        let sql = "
+            SELECT collection FROM zarr_data
+            WHERE ST_Intersects(
+                bbox,
+                ST_GeomFromText('POLYGON((100 100, 100 110, 110 110, 110 100, 100 100))')
+            )
+        ";
+
+        let df = ctx.sql(sql).await.expect("Failed to execute query");
+        let batches = df.collect().await.expect("Failed to collect results");
+
+        assert!(batches.is_empty(), "Query should not return results");
+    }
+
+    /// Test that ST_Intersects works with a larger query box that intersects multiple records.
+    #[tokio::test]
+    async fn test_st_intersects_multiple_matches() {
+
+        use arrow_array::Array;
+
+        let ctx = SessionContext::new();
+
+        register_spatial_functions(&ctx).expect("Failed to register spatial functions");
+
+        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr", "/meta")
+            .expect("Failed to create table provider");
+        ctx.register_table("zarr_data", Arc::new(provider))
+            .expect("Failed to register table");
+
+        // Query with a polygon that intersects collection_a and collection_b
+        // The query box (-15,-15) to (15,15) overlaps with both a and b but possibly not c
+        let sql = "
+            SELECT collection FROM zarr_data
+            WHERE ST_Intersects(
+                bbox,
+                ST_GeomFromText('POLYGON((-15 -15, -15 15, 15 15, 15 -15, -15 -15))')
+            )
+            ORDER BY collection
+        ";
+
+        let df = ctx.sql(sql).await.expect("Failed to execute query");
+        let batches = df.collect().await.expect("Failed to collect results");
+
+        // Should return multiple results
+        assert!(!batches.is_empty(), "Query should return results");
+        assert!(
+            batches[0].num_rows() >= 2,
+            "Should match at least collection_a and collection_b"
+        );
+
+        let collection_col = batches[0]
+            .column_by_name("collection")
+            .expect("collection column should exist");
+
+        let collection_array = collection_col
+            .as_any()
+            .downcast_ref::<StringViewArray>()
+            .expect("collection should be StringViewArray");
+
+        let collections: Vec<&str> = (0..collection_array.len())
+            .map(|i| collection_array.value(i))
+            .collect();
+
+        assert!(
+            collections.contains(&"collection_a"),
+            "collection_a should be in results"
+        );
+        assert!(
+            collections.contains(&"collection_b"),
+            "collection_b should be in results"
+        );
     }
 }

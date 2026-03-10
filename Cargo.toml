@@ -4,13 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-arrow = "56.2.0"
-arrow-array = "56.2.0"
-arrow-schema = "56.2.0"
+arrow = "57.0.0"
+arrow-array = "57.0.0"
+arrow-schema = "57.0.0"
 async-trait = "0.1.89"
-datafusion = "50.2"
+datafusion = "52.0"
 futures = "0.3.31"
-geoarrow-schema = "0.6.1"
+geodatafusion = "0.3"
+geoarrow-schema = "0.7.0"
 icechunk = "0.3.16"
 object_store = "0.12.4"
 thiserror = "2"
@@ -23,5 +24,5 @@ zarrs_object_store = "0.5.0"
 zarrs_storage = { version = "0.4.0", features = ["async"] }
 
 [dev-dependencies]
-geoarrow-array = "0.6.1"
+geoarrow-array = "0.7.0"
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
