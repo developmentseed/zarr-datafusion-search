@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use datafusion::execution::TaskContextProvider;
+use datafusion::prelude::SessionContext;
+use datafusion_ffi::execution::FFI_TaskContextProvider;
 use datafusion_ffi::table_provider::FFI_TableProvider;
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
@@ -77,7 +80,19 @@ impl PyZarrTable {
     ) -> PyResult<Bound<'py, PyCapsule>> {
         let name = cr"datafusion_table_provider".into();
 
-        let provider = FFI_TableProvider::new(self.0.clone(), false, None);
+        // Create a session context for the FFI task context provider
+        // This is needed by datafusion-ffi 52+ for certain operations
+        let ctx = Arc::new(SessionContext::new());
+        let task_ctx_provider = Arc::clone(&ctx) as Arc<dyn TaskContextProvider>;
+        let task_ctx_provider = FFI_TaskContextProvider::from(&task_ctx_provider);
+
+        let provider = FFI_TableProvider::new(
+            self.0.clone(),
+            false,
+            None,
+            task_ctx_provider,
+            None,
+        );
         PyCapsule::new(py, provider, Some(name))
     }
 }

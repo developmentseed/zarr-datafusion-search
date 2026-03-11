@@ -18,7 +18,8 @@ crate-type = ["cdylib"]
 [features]
 
 [dependencies]
-datafusion-ffi = "50"
+datafusion = "52"
+datafusion-ffi = "52.2.0"
 icechunk = "0.3.16"
 pyo3 = { version = "0.26", features = ["abi3-py39"] }
 pyo3-async-runtimes = { version = "0.26", features = ["tokio-runtime"] }
