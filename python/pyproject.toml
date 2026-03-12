@@ -5,7 +5,10 @@ build-backend = "maturin"
 [project]
 name = "zarr_datafusion_search"
 requires-python = ">=3.10"
-dependencies = ["datafusion>=52.0"]
+dependencies = [
+  "datafusion>=52.0",
+  "geodatafusion @ git+https://github.com/datafusion-contrib/geodatafusion.git@main#subdirectory=python",
+]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
