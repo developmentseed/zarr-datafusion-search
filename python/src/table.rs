@@ -99,13 +99,8 @@ impl PyZarrTable {
         let task_ctx_provider: Arc<dyn TaskContextProvider> = self._ctx.clone();
         let task_ctx_provider = FFI_TaskContextProvider::from(&task_ctx_provider);
 
-        let provider = FFI_TableProvider::new(
-            self.provider.clone(),
-            false,
-            None,
-            task_ctx_provider,
-            None,
-        );
+        let provider =
+            FFI_TableProvider::new(self.provider.clone(), false, None, task_ctx_provider, None);
         PyCapsule::new(py, provider, Some(name))
     }
 }

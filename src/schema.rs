@@ -66,9 +66,10 @@ fn zarr_to_arrow_field(name: String, zarr_dtype: &ZarrDataType) -> ZarrDataFusio
                 ));
             }
             _ => {
-                return Err(ZarrDataFusionError::Custom(
-                    format!("Expected 'bbox' field to be of Zarr Bytes data type, got: {:?}", zarr_dtype),
-                ));
+                return Err(ZarrDataFusionError::Custom(format!(
+                    "Expected 'bbox' field to be of Zarr Bytes data type, got: {:?}",
+                    zarr_dtype
+                )));
             }
         }
     }

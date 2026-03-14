@@ -10,7 +10,6 @@ use async_trait::async_trait;
 use datafusion::catalog::Session;
 use datafusion::datasource::{TableProvider, TableType};
 use datafusion::error::Result;
-use datafusion::prelude::SessionContext;
 use datafusion::execution::TaskContext;
 use datafusion::logical_expr::Expr;
 use datafusion::physical_expr::EquivalenceProperties;
@@ -20,6 +19,7 @@ use datafusion::physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionPlan, Partitioning, PlanProperties,
     SendableRecordBatchStream,
 };
+use datafusion::prelude::SessionContext;
 use object_store::ObjectStore;
 use std::any::Any;
 use std::fmt::{self, Debug};
@@ -35,7 +35,6 @@ use zarrs_storage::{MaybeSend, MaybeSync};
 
 use crate::error::{ZarrDataFusionError, ZarrDataFusionResult};
 use crate::schema::{group_arrays_schema, group_arrays_schema_async};
-
 
 pub fn register_spatial_functions(ctx: &SessionContext) -> Result<()> {
     geodatafusion::register(ctx);
@@ -518,7 +517,6 @@ mod tests {
     /// Test that ST_Intersects correctly selects records that intersect with the query geometry.
     #[tokio::test]
     async fn test_st_intersects_selects_matching_record() {
-
         use arrow_array::Array;
 
         let ctx = SessionContext::new();
@@ -546,7 +544,10 @@ mod tests {
 
         // Should return at least collection_a (and possibly b, c since they also contain this area)
         assert!(!batches.is_empty(), "Query should return results");
-        assert!(batches[0].num_rows() > 0, "Should have at least one matching row");
+        assert!(
+            batches[0].num_rows() > 0,
+            "Should have at least one matching row"
+        );
 
         let collection_col = batches[0]
             .column_by_name("collection")
@@ -570,7 +571,6 @@ mod tests {
     /// Test that ST_Intersects correctly returns no records when query geometry doesn't intersect.
     #[tokio::test]
     async fn test_st_intersects_no_match() {
-
         let ctx = SessionContext::new();
 
         register_spatial_functions(&ctx).expect("Failed to register spatial functions");
@@ -599,7 +599,6 @@ mod tests {
     /// Test that ST_Intersects works with a larger query box that intersects multiple records.
     #[tokio::test]
     async fn test_st_intersects_multiple_matches() {
-
         use arrow_array::Array;
 
         let ctx = SessionContext::new();

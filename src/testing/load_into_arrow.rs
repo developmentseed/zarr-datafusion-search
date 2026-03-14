@@ -73,7 +73,10 @@ fn test_load_zarrs_into_arrow_record_batch() {
     for i in 0..record_batch.num_rows() {
         println!(
             "  Row {}: collection='{}', date={}, bbox len={}",
-            i, collection_data[i], date_data[i], bbox_data[i].len()
+            i,
+            collection_data[i],
+            date_data[i],
+            bbox_data[i].len()
         );
     }
 
@@ -181,7 +184,10 @@ async fn test_load_zarrs_into_arrow_record_batch_icechunk() {
     for i in 0..record_batch.num_rows() {
         println!(
             "  Row {}: collection='{}', date={}, bbox len={}",
-            i, collection_data[i], date_data[i], bbox_data[i].len()
+            i,
+            collection_data[i],
+            date_data[i],
+            bbox_data[i].len()
         );
     }
 
