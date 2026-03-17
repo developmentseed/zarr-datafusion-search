@@ -15,7 +15,7 @@ def test_zarr_scan():
     zarr_path = ROOT_DIR / "data" / "zarr_store.zarr"
     zarr_table = ZarrTable(str(zarr_path), "/meta")
 
-    ctx.register_table_provider("zarr_data", zarr_table)
+    ctx.register_table("zarr_data", zarr_table)
 
     sql = "SELECT * FROM zarr_data;"
     df = ctx.sql(sql)
@@ -27,7 +27,7 @@ def test_spatial_functions_registered():
     zarr_path = ROOT_DIR / "data" / "zarr_store.zarr"
     zarr_table = ZarrTable(str(zarr_path), "/meta")
 
-    ctx.register_table_provider("zarr_data", zarr_table)
+    ctx.register_table("zarr_data", zarr_table)
     sql = (
         "SELECT collection FROM zarr_data "
         "WHERE ST_Intersects(bbox, ST_GeomFromText('POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))'))"
@@ -42,7 +42,7 @@ async def test_zarr_scan_from_obstore():
 
     ctx = SessionContext()
 
-    ctx.register_table_provider("zarr_data", zarr_table)
+    ctx.register_table("zarr_data", zarr_table)
 
     sql = "SELECT * FROM zarr_data;"
     df = ctx.sql(sql)
@@ -60,7 +60,7 @@ async def test_zarr_scan_from_icechunk():
 
     ctx = SessionContext()
 
-    ctx.register_table_provider("icechunk_data", zarr_table)
+    ctx.register_table("icechunk_data", zarr_table)
 
     sql = "SELECT * FROM icechunk_data;"
     df = ctx.sql(sql)
