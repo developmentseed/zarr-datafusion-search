@@ -1,5 +1,8 @@
 use std::sync::Arc;
 
+use datafusion::execution::TaskContextProvider;
+use datafusion::prelude::SessionContext;
+use datafusion_ffi::execution::FFI_TaskContextProvider;
 use datafusion_ffi::table_provider::FFI_TableProvider;
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
@@ -9,7 +12,11 @@ use pyo3_object_store::AnyObjectStore;
 use zarr_datafusion_search::table_provider::ZarrTableProvider;
 
 #[pyclass(name = "ZarrTable", frozen)]
-pub struct PyZarrTable(Arc<ZarrTableProvider>);
+pub struct PyZarrTable {
+    provider: Arc<ZarrTableProvider>,
+    // Session context needs to outlive the FFI boundary
+    _ctx: Arc<SessionContext>,
+}
 
 #[pymethods]
 impl PyZarrTable {
@@ -22,7 +29,10 @@ impl PyZarrTable {
                     e
                 ))
             })?;
-        Ok(PyZarrTable(Arc::new(table_provider)))
+        Ok(PyZarrTable {
+            provider: Arc::new(table_provider),
+            _ctx: Arc::new(SessionContext::new()),
+        })
     }
 
     #[classmethod]
@@ -32,7 +42,7 @@ impl PyZarrTable {
         session: Bound<'py, PyAny>,
         group_path: String,
     ) -> PyResult<Bound<'py, PyAny>> {
-        let bytes = session
+        let bytes: Vec<u8> = session
             .getattr("_session")?
             .call_method0("as_bytes")?
             .extract()?;
@@ -51,7 +61,11 @@ impl PyZarrTable {
             )
             .await
             .unwrap();
-            Ok(Self(Arc::new(table_provider)))
+
+            Ok(Self {
+                provider: Arc::new(table_provider),
+                _ctx: Arc::new(SessionContext::new()),
+            })
         })
     }
 
@@ -67,17 +81,26 @@ impl PyZarrTable {
             let table_provider = ZarrTableProvider::new_object_store(store, &group_path)
                 .await
                 .unwrap();
-            Ok(Self(Arc::new(table_provider)))
+            Ok(Self {
+                provider: Arc::new(table_provider),
+                _ctx: Arc::new(SessionContext::new()),
+            })
         })
     }
 
     pub fn __datafusion_table_provider__<'py>(
         &self,
         py: Python<'py>,
+        _session: Bound<'py, PyAny>,
     ) -> PyResult<Bound<'py, PyCapsule>> {
         let name = cr"datafusion_table_provider".into();
 
-        let provider = FFI_TableProvider::new(self.0.clone(), false, None);
+        // Use the stored SessionContext to create the task context provider
+        let task_ctx_provider: Arc<dyn TaskContextProvider> = self._ctx.clone();
+        let task_ctx_provider = FFI_TaskContextProvider::from(&task_ctx_provider);
+
+        let provider =
+            FFI_TableProvider::new(self.provider.clone(), false, None, task_ctx_provider, None);
         PyCapsule::new(py, provider, Some(name))
     }
 }

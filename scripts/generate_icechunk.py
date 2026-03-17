@@ -2,7 +2,8 @@ import icechunk
 import zarr
 import numpy as np
 import shapely
-from zarr.dtype import VariableLengthUTF8
+
+from zarr.dtype import VariableLengthBytes, VariableLengthUTF8
 
 location = "data/icechunk"
 storage = icechunk.local_filesystem_storage(location)
@@ -22,7 +23,7 @@ meta.create_array(
 )
 meta["collection"][...] = ["collection_a", "collection_b", "collection_c"]
 
-bbox_data = shapely.to_wkt(
+bbox_data = shapely.to_wkb(
     [
         shapely.box(-10.0, -10.0, 10.0, 10.0),
         shapely.box(-20.0, -20.0, 20.0, 20.0),
@@ -33,7 +34,7 @@ bbox_data = shapely.to_wkt(
 meta.create_array(
     "bbox",
     shape=len(bbox_data),
-    dtype=VariableLengthUTF8(),
+    dtype=VariableLengthBytes(),
 )
 meta["bbox"][...] = bbox_data
 

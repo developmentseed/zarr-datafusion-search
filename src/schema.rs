@@ -1,7 +1,7 @@
 //! Generate an Arrow schema from a Zarr array schema.
 
 use arrow_schema::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit};
-use geoarrow_schema::{Crs, WktType};
+use geoarrow_schema::{Crs, WkbType};
 use std::sync::Arc;
 use zarrs::array::Array;
 use zarrs::array::data_type::DataType as ZarrDataType;
@@ -56,19 +56,20 @@ fn field_name(group_root: &NodePath, array_path: &NodePath) -> String {
 fn zarr_to_arrow_field(name: String, zarr_dtype: &ZarrDataType) -> ZarrDataFusionResult<FieldRef> {
     if name == "bbox" {
         match zarr_dtype {
-            ZarrDataType::String => {
+            ZarrDataType::Bytes => {
                 let crs = Crs::from_authority_code("EPSG:4326".to_string());
                 let geoarrow_metadata = Arc::new(geoarrow_schema::Metadata::new(crs, None));
 
                 return Ok(Arc::new(
-                    Field::new(&name, DataType::Utf8View, false)
-                        .with_extension_type(WktType::new(geoarrow_metadata)),
+                    Field::new(&name, DataType::BinaryView, false)
+                        .with_extension_type(WkbType::new(geoarrow_metadata)),
                 ));
             }
             _ => {
-                return Err(ZarrDataFusionError::Custom(
-                    "Expected 'bbox' field to be of Zarr string data type.".to_string(),
-                ));
+                return Err(ZarrDataFusionError::Custom(format!(
+                    "Expected 'bbox' field to be of Zarr Bytes data type, got: {:?}",
+                    zarr_dtype
+                )));
             }
         }
     }
@@ -92,6 +93,7 @@ fn zarr_to_arrow_field(name: String, zarr_dtype: &ZarrDataType) -> ZarrDataFusio
             ));
         }
         ZarrDataType::RawBits(_size) => DataType::BinaryView,
+        ZarrDataType::Bytes => DataType::BinaryView,
         ZarrDataType::String => DataType::Utf8View,
         ZarrDataType::NumpyDateTime64 {
             unit,
@@ -145,8 +147,8 @@ mod tests {
 
         let expected_fields = vec![
             Arc::new(
-                Field::new("bbox", DataType::Utf8View, false)
-                    .with_extension_type(WktType::new(geoarrow_metadata)),
+                Field::new("bbox", DataType::BinaryView, false)
+                    .with_extension_type(WkbType::new(geoarrow_metadata)),
             ),
             Arc::new(Field::new("collection", DataType::Utf8View, false)),
             Arc::new(Field::new(

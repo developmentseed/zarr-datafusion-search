@@ -11,9 +11,7 @@ Users can define arbitrary schemas where the 1-dimensional arrays each use a `dt
 - Inside a Zarr group named `"meta"`
     - A `datetime64[ms]` array named `"date"` with `n` timestamps named `"date"` with `n` timestamps.
     - A `VariableLengthUTF8` array named `"collection"` with `n` string values.
-    - A `VariableLengthUTF8` array named `"bbox"` with `n` string values, stored as a `VariableLengthUTF8` array, where each string is a WKT-encoded Polygon (or MultiPolygon) with the bounding box of that Zarr record.
-
-        In the future, we will likely use a binary encoding like WKB, but Zarr's binary dtype is [not currently well-specified](https://github.com/zarr-developers/zarr-python/issues/3517).
+    - A `VariableLengthBytes` array named `"bbox"` with `n` binary values, where each value is a WKB-encoded Polygon (or MultiPolygon) with the bounding box of that Zarr record.
 
 This data schema may change over time.
 

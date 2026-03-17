@@ -1,7 +1,7 @@
 use arrow_array::{ArrayRef, RecordBatch, StringArray, TimestampMillisecondArray};
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
 use geoarrow_array::GeoArrowArray;
-use geoarrow_array::array::WktArray;
+use geoarrow_array::array::WkbArray;
 use geoarrow_schema::Crs;
 use icechunk::{Repository, RepositoryConfig, repository::VersionInfo};
 use std::collections::HashMap;
@@ -31,19 +31,20 @@ fn test_load_zarrs_into_arrow_record_batch() {
         .retrieve_array_subset_elements(&date_subset)
         .unwrap();
 
-    // Load bbox array (strings representing WKT geometries)
+    // Load bbox array (binary data representing WKB geometries)
     let bbox_array = Array::open(store.clone(), "/meta/bbox").unwrap();
     let bbox_subset = ArraySubset::new_with_shape(bbox_array.shape().to_vec());
-    let bbox_data: Vec<String> = bbox_array
+    let bbox_data: Vec<Vec<u8>> = bbox_array
         .retrieve_array_subset_elements(&bbox_subset)
         .unwrap();
 
     // Create Arrow arrays from the loaded data
     let collection_arrow: ArrayRef = Arc::new(StringArray::from(collection_data.clone()));
     let date_arrow: ArrayRef = Arc::new(TimestampMillisecondArray::from(date_data.clone()));
-    let wkt_crs = Crs::from_authority_code("EPSG:4326".to_string());
-    let wkt_metadata = Arc::new(geoarrow_schema::Metadata::new(wkt_crs, None));
-    let wkt_arrow = WktArray::new(bbox_data.clone().into(), wkt_metadata);
+    let wkb_crs = Crs::from_authority_code("EPSG:4326".to_string());
+    let wkb_metadata = Arc::new(geoarrow_schema::Metadata::new(wkb_crs, None));
+    let bbox_refs: Vec<&[u8]> = bbox_data.iter().map(|v| v.as_slice()).collect();
+    let wkb_arrow = WkbArray::new(bbox_refs.into(), wkb_metadata);
 
     // Define the schema
     let schema = Arc::new(Schema::new(vec![
@@ -53,13 +54,13 @@ fn test_load_zarrs_into_arrow_record_batch() {
             DataType::Timestamp(TimeUnit::Millisecond, None),
             false,
         ),
-        wkt_arrow.data_type().to_field("bbox", false),
+        wkb_arrow.data_type().to_field("bbox", false),
     ]));
 
     // Create the RecordBatch
     let record_batch = RecordBatch::try_new(
         schema.clone(),
-        vec![collection_arrow, date_arrow, wkt_arrow.into_array_ref()],
+        vec![collection_arrow, date_arrow, wkb_arrow.into_array_ref()],
     )
     .unwrap();
 
@@ -71,8 +72,11 @@ fn test_load_zarrs_into_arrow_record_batch() {
     println!("\nData:");
     for i in 0..record_batch.num_rows() {
         println!(
-            "  Row {}: collection='{}', date={}, bbox={}",
-            i, collection_data[i], date_data[i], bbox_data[i]
+            "  Row {}: collection='{}', date={}, bbox len={}",
+            i,
+            collection_data[i],
+            date_data[i],
+            bbox_data[i].len()
         );
     }
 
@@ -135,12 +139,12 @@ async fn test_load_zarrs_into_arrow_record_batch_icechunk() {
         .await
         .unwrap();
 
-    // Load bbox array (strings representing WKT geometries)
+    // Load bbox array (binary data representing WKB geometries)
     let bbox_array = Array::async_open(store.clone(), "/meta/bbox")
         .await
         .unwrap();
     let bbox_subset = ArraySubset::new_with_shape(bbox_array.shape().to_vec());
-    let bbox_data: Vec<String> = bbox_array
+    let bbox_data: Vec<Vec<u8>> = bbox_array
         .async_retrieve_array_subset_elements(&bbox_subset)
         .await
         .unwrap();
@@ -148,9 +152,10 @@ async fn test_load_zarrs_into_arrow_record_batch_icechunk() {
     // Create Arrow arrays from the loaded data
     let collection_arrow: ArrayRef = Arc::new(StringArray::from(collection_data.clone()));
     let date_arrow: ArrayRef = Arc::new(TimestampMillisecondArray::from(date_data.clone()));
-    let wkt_crs = Crs::from_authority_code("EPSG:4326".to_string());
-    let wkt_metadata = Arc::new(geoarrow_schema::Metadata::new(wkt_crs, None));
-    let wkt_arrow = WktArray::new(bbox_data.clone().into(), wkt_metadata);
+    let wkb_crs = Crs::from_authority_code("EPSG:4326".to_string());
+    let wkb_metadata = Arc::new(geoarrow_schema::Metadata::new(wkb_crs, None));
+    let bbox_refs: Vec<&[u8]> = bbox_data.iter().map(|v| v.as_slice()).collect();
+    let wkb_arrow = WkbArray::new(bbox_refs.into(), wkb_metadata);
 
     // Define the schema
     let schema = Arc::new(Schema::new(vec![
@@ -160,13 +165,13 @@ async fn test_load_zarrs_into_arrow_record_batch_icechunk() {
             DataType::Timestamp(TimeUnit::Millisecond, None),
             false,
         ),
-        wkt_arrow.data_type().to_field("bbox", false),
+        wkb_arrow.data_type().to_field("bbox", false),
     ]));
 
     // Create the RecordBatch
     let record_batch = RecordBatch::try_new(
         schema.clone(),
-        vec![collection_arrow, date_arrow, wkt_arrow.into_array_ref()],
+        vec![collection_arrow, date_arrow, wkb_arrow.into_array_ref()],
     )
     .unwrap();
 
@@ -178,8 +183,11 @@ async fn test_load_zarrs_into_arrow_record_batch_icechunk() {
     println!("\nData:");
     for i in 0..record_batch.num_rows() {
         println!(
-            "  Row {}: collection='{}', date={}, bbox={}",
-            i, collection_data[i], date_data[i], bbox_data[i]
+            "  Row {}: collection='{}', date={}, bbox len={}",
+            i,
+            collection_data[i],
+            date_data[i],
+            bbox_data[i].len()
         );
     }
 
