@@ -458,12 +458,17 @@ impl DisplayAs for ZarrExec {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
+    use crate::testing::utils::get_local_zarr_store;
     use datafusion::prelude::SessionContext;
 
     #[tokio::test]
     async fn test_basic_table_provider() {
-        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr", "/meta").unwrap();
+        let wrapper = get_local_zarr_store("data/basic_table_provider.zarr").await;
+        let path = wrapper.get_store_path();
+
+        let provider = ZarrTableProvider::new_filesystem(path, "/meta").unwrap();
 
         // Register with DataFusion
         let ctx = SessionContext::new();
@@ -484,7 +489,10 @@ mod tests {
     #[tokio::test]
     #[ignore = "Projection support"]
     async fn test_table_provider_with_sql() {
-        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr", "/meta").unwrap();
+        let wrapper = get_local_zarr_store("data/provider_sql.zarr").await;
+        let path = wrapper.get_store_path();
+
+        let provider = ZarrTableProvider::new_filesystem(path, "/meta").unwrap();
 
         // Register with DataFusion
         let ctx = SessionContext::new();
@@ -519,25 +527,27 @@ mod tests {
     async fn test_st_intersects_selects_matching_record() {
         use arrow_array::Array;
 
+        let wrapper = get_local_zarr_store("data/intersects_matching.zarr").await;
+        let path = wrapper.get_store_path();
+
         let ctx = SessionContext::new();
 
         register_spatial_functions(&ctx).expect("Failed to register spatial functions");
 
-        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr", "/meta")
-            .expect("Failed to create table provider");
+        let provider = ZarrTableProvider::new_filesystem(path, "/meta").unwrap();
         ctx.register_table("zarr_data", Arc::new(provider))
             .expect("Failed to register table");
 
         // Query with a polygon that intersects collection_a
         // The query box (0,0) to (5,5) is within collection_a's bbox (-10,-10) to (10,10)
         let sql = "
-            SELECT collection FROM zarr_data
-            WHERE ST_Intersects(
-                bbox,
-                ST_GeomFromText('POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))')
-            )
-            ORDER BY collection
-        ";
+                SELECT collection FROM zarr_data
+                WHERE ST_Intersects(
+                    bbox,
+                    ST_GeomFromText('POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))')
+                )
+                ORDER BY collection
+            ";
 
         let df = ctx.sql(sql).await.expect("Failed to execute query");
         let batches = df.collect().await.expect("Failed to collect results");
@@ -571,24 +581,26 @@ mod tests {
     /// Test that ST_Intersects correctly returns no records when query geometry doesn't intersect.
     #[tokio::test]
     async fn test_st_intersects_no_match() {
+        let wrapper = get_local_zarr_store("data/intersects_no_path.zarr").await;
+        let path = wrapper.get_store_path();
+
         let ctx = SessionContext::new();
 
         register_spatial_functions(&ctx).expect("Failed to register spatial functions");
+        let provider = ZarrTableProvider::new_filesystem(path, "/meta").unwrap();
 
-        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr", "/meta")
-            .expect("Failed to create table provider");
         ctx.register_table("zarr_data", Arc::new(provider))
             .expect("Failed to register table");
 
         // Query with a polygon that doesn't intersect any of the test data
         // The query box (100,100) to (110,110) is far from all test bboxes
         let sql = "
-            SELECT collection FROM zarr_data
-            WHERE ST_Intersects(
-                bbox,
-                ST_GeomFromText('POLYGON((100 100, 100 110, 110 110, 110 100, 100 100))')
-            )
-        ";
+                SELECT collection FROM zarr_data
+                WHERE ST_Intersects(
+                    bbox,
+                    ST_GeomFromText('POLYGON((100 100, 100 110, 110 110, 110 100, 100 100))')
+                )
+            ";
 
         let df = ctx.sql(sql).await.expect("Failed to execute query");
         let batches = df.collect().await.expect("Failed to collect results");
@@ -601,25 +613,27 @@ mod tests {
     async fn test_st_intersects_multiple_matches() {
         use arrow_array::Array;
 
+        let wrapper = get_local_zarr_store("data/intersects_multiple_match.zarr").await;
+        let path = wrapper.get_store_path();
+
         let ctx = SessionContext::new();
 
         register_spatial_functions(&ctx).expect("Failed to register spatial functions");
 
-        let provider = ZarrTableProvider::new_filesystem("data/zarr_store.zarr", "/meta")
-            .expect("Failed to create table provider");
+        let provider = ZarrTableProvider::new_filesystem(path, "/meta").unwrap();
         ctx.register_table("zarr_data", Arc::new(provider))
             .expect("Failed to register table");
 
         // Query with a polygon that intersects collection_a and collection_b
         // The query box (-15,-15) to (15,15) overlaps with both a and b but possibly not c
         let sql = "
-            SELECT collection FROM zarr_data
-            WHERE ST_Intersects(
-                bbox,
-                ST_GeomFromText('POLYGON((-15 -15, -15 15, 15 15, 15 -15, -15 -15))')
-            )
-            ORDER BY collection
-        ";
+                SELECT collection FROM zarr_data
+                WHERE ST_Intersects(
+                    bbox,
+                    ST_GeomFromText('POLYGON((-15 -15, -15 15, 15 15, 15 -15, -15 -15))')
+                )
+                ORDER BY collection
+            ";
 
         let df = ctx.sql(sql).await.expect("Failed to execute query");
         let batches = df.collect().await.expect("Failed to collect results");

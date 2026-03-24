@@ -131,33 +131,39 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::testing::utils::get_local_zarr_store;
     use zarrs_filesystem::FilesystemStore;
 
-    #[test]
-    fn test_schema_from_zarr_group() {
-        let storage = Arc::new(FilesystemStore::new("data/zarr_store.zarr").unwrap());
+    #[tokio::test]
+    async fn test_schema_from_zarr_group() {
+        let wrapper = get_local_zarr_store("data/schema.zarr").await;
+        let path = wrapper.get_store_path();
 
-        let group = Group::open(storage.clone(), "/meta").unwrap();
-        let schema = group_arrays_schema(&group).unwrap();
+        {
+            let storage = Arc::new(FilesystemStore::new(path).unwrap());
 
-        let geoarrow_metadata = Arc::new(geoarrow_schema::Metadata::new(
-            Crs::from_authority_code("EPSG:4326".to_string()),
-            None,
-        ));
+            let group = Group::open(storage.clone(), "/meta").unwrap();
+            let schema = group_arrays_schema(&group).unwrap();
 
-        let expected_fields = vec![
-            Arc::new(
-                Field::new("bbox", DataType::BinaryView, false)
-                    .with_extension_type(WkbType::new(geoarrow_metadata)),
-            ),
-            Arc::new(Field::new("collection", DataType::Utf8View, false)),
-            Arc::new(Field::new(
-                "date",
-                DataType::Timestamp(TimeUnit::Millisecond, None),
-                false,
-            )),
-        ];
-        let expected_schema = Arc::new(Schema::new(expected_fields));
-        assert_eq!(&schema, &expected_schema);
+            let geoarrow_metadata = Arc::new(geoarrow_schema::Metadata::new(
+                Crs::from_authority_code("EPSG:4326".to_string()),
+                None,
+            ));
+
+            let expected_fields = vec![
+                Arc::new(
+                    Field::new("bbox", DataType::BinaryView, false)
+                        .with_extension_type(WkbType::new(geoarrow_metadata)),
+                ),
+                Arc::new(Field::new("collection", DataType::Utf8View, false)),
+                Arc::new(Field::new(
+                    "date",
+                    DataType::Timestamp(TimeUnit::Millisecond, None),
+                    false,
+                )),
+            ];
+            let expected_schema = Arc::new(Schema::new(expected_fields));
+            assert_eq!(&schema, &expected_schema);
+        }
     }
 }
