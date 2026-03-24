@@ -1,15 +1,31 @@
 use futures::executor::block_on;
+use icechunk::{ObjectStorage, Repository};
 use object_store::local::LocalFileSystem;
+use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use zarrs::array::{ArrayBuilder, DataType, FillValue};
 use zarrs::array_subset::ArraySubset;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
+use zarrs_icechunk::AsyncIcechunkStore;
 use zarrs_object_store::AsyncObjectStore;
 use zarrs_storage::{
     AsyncReadableWritableListableStorageTraits, AsyncWritableStorageTraits, StorePrefix,
 };
+
+/// Helper function to cleanup a store and remove its directory
+#[cfg(test)]
+fn cleanup_store_and_directory(store: &dyn AsyncWritableStorageTraits, path: &Path) {
+    // First, clear all data through the store interface
+    let prefix = StorePrefix::new("").unwrap();
+    let _ = block_on(store.erase_prefix(&prefix));
+
+    // Then recursively remove the directory and all its contents
+    if path.exists() {
+        let _ = fs::remove_dir_all(path);
+    }
+}
 
 pub(crate) struct LocalZarrStoreWrapper {
     store: Arc<AsyncObjectStore<LocalFileSystem>>,
@@ -52,14 +68,52 @@ impl LocalZarrStoreWrapper {
 // Include drop to remove store when it goes out of test scope
 impl Drop for LocalZarrStoreWrapper {
     fn drop(&mut self) {
-        // First, clear all data through the store interface
-        let prefix = StorePrefix::new("").unwrap();
-        let _ = block_on(self.store.erase_prefix(&prefix));
+        cleanup_store_and_directory(self.store.as_ref(), &self.path);
+    }
+}
 
-        // Then recursively remove the directory and all its contents
-        if self.path.exists() {
-            let _ = fs::remove_dir_all(&self.path);
+pub(crate) struct LocalIcechunkStoreWrapper {
+    store: Arc<AsyncIcechunkStore>,
+    path: PathBuf,
+}
+
+// Note that this wrapper should use unique store names to avoid collisons with
+// running concurrent binary test execution.
+#[cfg(test)]
+impl LocalIcechunkStoreWrapper {
+    pub(crate) async fn new(store_name: String) -> Self {
+        if store_name.is_empty() {
+            panic!("name for test icechunk repo cannot be empty!")
         }
+        let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(store_name);
+        fs::create_dir(p.clone()).unwrap();
+        let repo = Repository::create(
+            None,
+            Arc::new(ObjectStorage::new_local_filesystem(&p).await.unwrap()),
+            HashMap::new(),
+        )
+        .await
+        .unwrap();
+        let session = repo.writable_session("main").await.unwrap();
+        Self {
+            store: Arc::new(AsyncIcechunkStore::new(session)),
+            path: p,
+        }
+    }
+
+    pub(crate) fn get_store(&self) -> Arc<AsyncIcechunkStore> {
+        self.store.clone()
+    }
+
+    pub(crate) fn get_store_path(&self) -> String {
+        self.path.to_str().unwrap().into()
+    }
+}
+
+// Include drop to remove store when it goes out of test scope
+impl Drop for LocalIcechunkStoreWrapper {
+    fn drop(&mut self) {
+        cleanup_store_and_directory(self.store.as_ref(), &self.path);
     }
 }
 
@@ -167,5 +221,21 @@ pub(crate) async fn get_local_zarr_store(dir_name: &str) -> LocalZarrStoreWrappe
     generate_test_data_arrays(store)
         .await
         .expect("Failed to generate test data arrays");
+    wrapper
+}
+
+pub(crate) async fn get_local_icechunk_store(dir_name: &str) -> LocalIcechunkStoreWrapper {
+    let wrapper = LocalIcechunkStoreWrapper::new(dir_name.into()).await;
+    let store = wrapper.get_store();
+    generate_test_data_arrays(store.clone())
+        .await
+        .expect("Failed to generate test data arrays");
+    let _ = store
+        .session()
+        .write()
+        .await
+        .commit("test data", None)
+        .await
+        .unwrap();
     wrapper
 }

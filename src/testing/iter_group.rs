@@ -1,3 +1,4 @@
+use crate::testing::utils::get_local_icechunk_store;
 use crate::testing::utils::get_local_zarr_store;
 use icechunk::{Repository, RepositoryConfig, repository::VersionInfo};
 use std::collections::HashMap;
@@ -21,9 +22,12 @@ async fn test_load_group() {
 
 #[tokio::test]
 async fn test_load_group_icechunk() {
-    let storage = icechunk::new_local_filesystem_storage(Path::new("data/icechunk"))
+    let wrapper = get_local_icechunk_store("data/ice_group").await;
+    let path = wrapper.get_store_path();
+    let storage = icechunk::new_local_filesystem_storage(Path::new(&path))
         .await
         .unwrap();
+
     let config = RepositoryConfig::default();
     let repo = Repository::open(Some(config), storage, HashMap::new())
         .await

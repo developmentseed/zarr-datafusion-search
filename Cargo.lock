@@ -6151,7 +6151,6 @@ dependencies = [
  "object_store 0.12.5",
  "thiserror 2.0.18",
  "tokio",
- "walkdir",
  "wkb",
  "zarrs",
  "zarrs_filesystem",

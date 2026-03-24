@@ -1,3 +1,4 @@
+use crate::testing::utils::get_local_icechunk_store;
 use crate::testing::utils::get_local_zarr_store;
 use arrow_array::{ArrayRef, RecordBatch, StringArray, TimestampMillisecondArray};
 use arrow_schema::{DataType, Field, Schema, TimeUnit};
@@ -112,7 +113,9 @@ async fn test_load_zarrs_into_arrow_record_batch() {
 
 #[tokio::test]
 async fn test_load_zarrs_into_arrow_record_batch_icechunk() {
-    let storage = icechunk::new_local_filesystem_storage(Path::new("data/icechunk"))
+    let wrapper = get_local_icechunk_store("data/ice_arrow").await;
+    let path = wrapper.get_store_path();
+    let storage = icechunk::new_local_filesystem_storage(Path::new(&path))
         .await
         .unwrap();
     let config = RepositoryConfig::default();
