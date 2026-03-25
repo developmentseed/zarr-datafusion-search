@@ -31,3 +31,24 @@ dev-dependencies = [
     "pytest",
     "shapely",
 ]
+
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+per-file-ignores = {}
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.pytest.ini_options]
+# Directories to search for tests
+testpaths = [
+    "tests",
+]

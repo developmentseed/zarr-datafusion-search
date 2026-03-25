@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from ._rust import ZarrTable
-from ._rust import ___version
+from ._rust import ZarrTable, ___version
 
 __version__: str = ___version()
 

@@ -8,9 +8,15 @@ use icechunk::{Repository, RepositoryConfig};
 use tokio::runtime::Handle;
 
 use crate::table_provider::ZarrTableProvider;
+use crate::testing::utils::get_local_icechunk_store;
 
-async fn create_icechunk_table_provider() -> icechunk::session::Session {
-    let storage = icechunk::new_local_filesystem_storage(Path::new("data/icechunk"))
+#[tokio::test]
+async fn test_datafusion() {
+    let ctx = SessionContext::new();
+
+    let wrapper = get_local_icechunk_store().await;
+    let path = wrapper.get_store_path();
+    let storage = icechunk::new_local_filesystem_storage(Path::new(&path))
         .await
         .unwrap();
     let config = RepositoryConfig::default();
@@ -18,15 +24,8 @@ async fn create_icechunk_table_provider() -> icechunk::session::Session {
         .await
         .unwrap();
     let version_info = VersionInfo::BranchTipRef("main".to_string());
-    repo.readonly_session(&version_info).await.unwrap()
-}
+    let icechunk_session = repo.readonly_session(&version_info).await.unwrap();
 
-#[tokio::test]
-async fn test_datafusion() {
-    let ctx = SessionContext::new();
-
-    // Add icechunk session
-    let icechunk_session = create_icechunk_table_provider().await;
     let table_provider = Arc::new(
         ZarrTableProvider::new_icechunk(icechunk_session, Handle::current(), "/meta")
             .await

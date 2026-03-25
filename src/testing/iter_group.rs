@@ -1,3 +1,5 @@
+use crate::testing::utils::get_local_icechunk_store;
+use crate::testing::utils::get_local_zarr_store;
 use icechunk::{Repository, RepositoryConfig, repository::VersionInfo};
 use std::collections::HashMap;
 use std::path::Path;
@@ -6,19 +8,26 @@ use zarrs::group::Group;
 use zarrs_filesystem::FilesystemStore;
 use zarrs_icechunk::AsyncIcechunkStore;
 
-#[test]
-fn test_load_group() {
-    let storage = Arc::new(FilesystemStore::new("data/zarr_store.zarr").unwrap());
+#[tokio::test]
+async fn test_load_group() {
+    let wrapper = get_local_zarr_store().await;
+    let path = wrapper.get_store_path();
 
-    let group = Group::open(storage.clone(), "/meta").unwrap();
-    dbg!(group.path());
+    {
+        let storage = Arc::new(FilesystemStore::new(path).unwrap());
+        let group = Group::open(storage.clone(), "/meta").unwrap();
+        dbg!(group.path());
+    }
 }
 
 #[tokio::test]
 async fn test_load_group_icechunk() {
-    let storage = icechunk::new_local_filesystem_storage(Path::new("data/icechunk"))
+    let wrapper = get_local_icechunk_store().await;
+    let path = wrapper.get_store_path();
+    let storage = icechunk::new_local_filesystem_storage(Path::new(&path))
         .await
         .unwrap();
+
     let config = RepositoryConfig::default();
     let repo = Repository::open(Some(config), storage, HashMap::new())
         .await
