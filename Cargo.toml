@@ -27,5 +27,6 @@ zarrs_storage = { version = "0.4.0", features = ["async"] }
 chrono = "0.4.44"
 geo = "0.31"
 geoarrow-array = "0.7.0"
+tempfile = "3"
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
 wkb = "0.9"

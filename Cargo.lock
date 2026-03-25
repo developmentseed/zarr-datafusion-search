@@ -6149,6 +6149,7 @@ dependencies = [
  "geodatafusion",
  "icechunk",
  "object_store 0.12.5",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "wkb",

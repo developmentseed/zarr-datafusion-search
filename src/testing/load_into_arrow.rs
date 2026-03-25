@@ -16,7 +16,7 @@ use zarrs_icechunk::AsyncIcechunkStore;
 
 #[tokio::test]
 async fn test_load_zarrs_into_arrow_record_batch() {
-    let wrapper = get_local_zarr_store("data/arrow_batch.zarr").await;
+    let wrapper = get_local_zarr_store().await;
     let path = wrapper.get_store_path();
 
     {
@@ -113,7 +113,7 @@ async fn test_load_zarrs_into_arrow_record_batch() {
 
 #[tokio::test]
 async fn test_load_zarrs_into_arrow_record_batch_icechunk() {
-    let wrapper = get_local_icechunk_store("data/ice_arrow").await;
+    let wrapper = get_local_icechunk_store().await;
     let path = wrapper.get_store_path();
     let storage = icechunk::new_local_filesystem_storage(Path::new(&path))
         .await

@@ -465,7 +465,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_basic_table_provider() {
-        let wrapper = get_local_zarr_store("data/basic_table_provider.zarr").await;
+        let wrapper = get_local_zarr_store().await;
         let path = wrapper.get_store_path();
 
         let provider = ZarrTableProvider::new_filesystem(path, "/meta").unwrap();
@@ -489,7 +489,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "Projection support"]
     async fn test_table_provider_with_sql() {
-        let wrapper = get_local_zarr_store("data/provider_sql.zarr").await;
+        let wrapper = get_local_zarr_store().await;
         let path = wrapper.get_store_path();
 
         let provider = ZarrTableProvider::new_filesystem(path, "/meta").unwrap();
@@ -527,7 +527,7 @@ mod tests {
     async fn test_st_intersects_selects_matching_record() {
         use arrow_array::Array;
 
-        let wrapper = get_local_zarr_store("data/intersects_matching.zarr").await;
+        let wrapper = get_local_zarr_store().await;
         let path = wrapper.get_store_path();
 
         let ctx = SessionContext::new();
@@ -581,7 +581,7 @@ mod tests {
     /// Test that ST_Intersects correctly returns no records when query geometry doesn't intersect.
     #[tokio::test]
     async fn test_st_intersects_no_match() {
-        let wrapper = get_local_zarr_store("data/intersects_no_path.zarr").await;
+        let wrapper = get_local_zarr_store().await;
         let path = wrapper.get_store_path();
 
         let ctx = SessionContext::new();
@@ -613,7 +613,7 @@ mod tests {
     async fn test_st_intersects_multiple_matches() {
         use arrow_array::Array;
 
-        let wrapper = get_local_zarr_store("data/intersects_multiple_match.zarr").await;
+        let wrapper = get_local_zarr_store().await;
         let path = wrapper.get_store_path();
 
         let ctx = SessionContext::new();

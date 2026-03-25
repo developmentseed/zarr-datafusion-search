@@ -136,7 +136,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_schema_from_zarr_group() {
-        let wrapper = get_local_zarr_store("data/schema.zarr").await;
+        let wrapper = get_local_zarr_store().await;
         let path = wrapper.get_store_path();
 
         {
