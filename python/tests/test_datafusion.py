@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import icechunk
 import pytest
 from datafusion import SessionContext
@@ -7,13 +5,11 @@ from geodatafusion import register_all
 from obstore.store import LocalStore
 from zarr_datafusion_search import ZarrTable
 
-ROOT_DIR = Path(__file__).parent.parent.parent
 
-
-def test_zarr_scan():
+def test_zarr_scan(session_zarr_store):
+    """Test basic zarr scanning with DataFusion."""
     ctx = SessionContext()
-    zarr_path = ROOT_DIR / "data" / "zarr_store.zarr"
-    zarr_table = ZarrTable(str(zarr_path), "/meta")
+    zarr_table = ZarrTable(str(session_zarr_store), "/meta")
 
     ctx.register_table("zarr_data", zarr_table)
 
@@ -21,23 +17,27 @@ def test_zarr_scan():
     df = ctx.sql(sql)
     df.show()
 
-def test_spatial_functions_registered():
+
+def test_spatial_functions_registered(session_zarr_store):
+    """Test that spatial functions work with zarr data."""
     ctx = SessionContext()
     register_all(ctx)
-    zarr_path = ROOT_DIR / "data" / "zarr_store.zarr"
-    zarr_table = ZarrTable(str(zarr_path), "/meta")
+    zarr_table = ZarrTable(str(session_zarr_store), "/meta")
 
     ctx.register_table("zarr_data", zarr_table)
     sql = (
         "SELECT collection FROM zarr_data "
-        "WHERE ST_Intersects(bbox, ST_GeomFromText('POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))'))"
+        "WHERE ST_Intersects(bbox, "
+        "ST_GeomFromText('POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))'))"
     )
     df = ctx.sql(sql)
     df.show()
 
+
 @pytest.mark.asyncio
-async def test_zarr_scan_from_obstore():
-    store = LocalStore(ROOT_DIR / "data" / "zarr_store.zarr")
+async def test_zarr_scan_from_obstore(session_zarr_store):
+    """Test zarr scanning from object store."""
+    store = LocalStore(session_zarr_store)
     zarr_table = await ZarrTable.from_obstore(store, "/meta")
 
     ctx = SessionContext()
@@ -51,8 +51,9 @@ async def test_zarr_scan_from_obstore():
 
 
 @pytest.mark.asyncio
-async def test_zarr_scan_from_icechunk():
-    storage = icechunk.local_filesystem_storage(ROOT_DIR / "data" / "icechunk")
+async def test_zarr_scan_from_icechunk(session_icechunk_store):
+    """Test zarr scanning from icechunk."""
+    storage = icechunk.local_filesystem_storage(session_icechunk_store)
     repo = icechunk.Repository.open(storage)
     session = repo.readonly_session("main")
 
