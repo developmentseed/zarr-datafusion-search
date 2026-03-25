@@ -135,11 +135,9 @@ pub(crate) async fn generate_test_data_arrays(
     let group = zarrs::group::GroupBuilder::new().build(store.clone(), "/meta")?;
     group.async_store_metadata().await?;
 
-    let dates = vec![
-        NaiveDate::from_ymd_opt(2023, 1, 1).unwrap(),
+    let dates = [NaiveDate::from_ymd_opt(2023, 1, 1).unwrap(),
         NaiveDate::from_ymd_opt(2023, 1, 2).unwrap(),
-        NaiveDate::from_ymd_opt(2023, 1, 3).unwrap(),
-    ];
+        NaiveDate::from_ymd_opt(2023, 1, 3).unwrap()];
 
     // Convert to milliseconds since Unix epoch
     let date_data: Vec<i64> = dates
