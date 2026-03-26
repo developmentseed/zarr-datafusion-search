@@ -26,7 +26,7 @@ zarrs_storage = { version = "0.4.0", features = ["async"] }
 [dev-dependencies]
 bytesize = "1"
 chrono = "0.4.44"
-criterion = "0.5.1"
+criterion = { version = "0.5.1", features = ["async_tokio"] }
 dhat = "0.3"
 geo = "0.31"
 geoarrow-array = "0.7.0"

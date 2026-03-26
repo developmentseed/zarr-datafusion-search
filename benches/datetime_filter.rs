@@ -1,9 +1,9 @@
-//! Benchmark for icechunk store with ~36.5M datetime values.
+//! Benchmark for icechunk store with ~54.8M datetime values.
 //!
 //! This generates:
-//! - 3,650 days (2015-01-01 to 2025-01-01, approximately 10 years)
+//! - 5,479 days (2010-01-01 to 2025-01-01, approximately 15 years)
 //! - 10,000 random timestamps per day
-//! - Total: 36,500,000 datetime64[ms] values
+//! - Total: 54,790,000 datetime64[ms] values
 //! - Chunks: 1,000,000 elements per chunk (approximately 10MB per chunk)
 //!
 //! The data is generated in a temporary directory that is automatically cleaned up.
@@ -13,12 +13,13 @@ use chrono::NaiveDate;
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode};
 use datafusion::prelude::SessionContext;
 use icechunk::{repository::VersionInfo, ObjectStorage, Repository};
+use icechunk::session::Session;
 use rand::Rng;
 use std::collections::HashMap;
 use std::hint::black_box;
 use std::sync::Arc;
 use tempfile::TempDir;
-use tokio::runtime::{Handle, Runtime};
+use tokio::runtime::Runtime;
 use zarr_datafusion_search::table_provider::ZarrTableProvider;
 use zarrs::array::{ArrayBuilder, DataType, FillValue};
 use zarrs::array_subset::ArraySubset;
@@ -33,7 +34,7 @@ const MS_PER_DAY: i64 = 24 * 60 * 60 * 1000; // 86,400,000 milliseconds
 const CHUNK_SIZE: u64 = 1_000_000; // 1M elements per chunk
 
 
-fn generate_table_provider(rt: &Runtime) -> Result<SessionContext, Box<dyn std::error::Error>> {
+fn generate_icechunk_store(rt: &Runtime) -> Result<(Session, TempDir), Box<dyn std::error::Error>> {
     let _guard = rt.enter();
 
     let temp_dir = TempDir::new()?;
@@ -50,7 +51,7 @@ fn generate_table_provider(rt: &Runtime) -> Result<SessionContext, Box<dyn std::
     let meta_group = zarrs::group::GroupBuilder::new().build(store.clone(), "/meta")?;
     rt.block_on(meta_group.async_store_metadata())?;
 
-    let start_date = NaiveDate::from_ymd_opt(2015, 1, 1).unwrap();
+    let start_date = NaiveDate::from_ymd_opt(2010, 1, 1).unwrap();
     let end_date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
     let num_days = (end_date - start_date).num_days() as usize;
 
@@ -105,11 +106,16 @@ fn generate_table_provider(rt: &Runtime) -> Result<SessionContext, Box<dyn std::
 
     // Open a readonly session to read the data back
     let readonly_session = rt.block_on(repo.readonly_session(&VersionInfo::BranchTipRef("main".to_string()))).unwrap();
+    Ok((readonly_session, temp_dir))
+}
 
+fn benchmark(c: &mut Criterion) {
+    let rt = Runtime::new().unwrap();
+    let (session, _temp_dir) = generate_icechunk_store(&rt).unwrap();
     let table_provider = Arc::new(
         rt.block_on(ZarrTableProvider::new_icechunk(
-            readonly_session,
-            Handle::current(),
+            session,
+            rt.handle().clone(),
             "/meta",
         ))
         .unwrap(),
@@ -118,15 +124,6 @@ fn generate_table_provider(rt: &Runtime) -> Result<SessionContext, Box<dyn std::
     let ctx = SessionContext::new();
     ctx.register_table("zarr_data", table_provider).unwrap();
 
-    // Keep temp_dir alive by moving it into the context
-    std::mem::forget(temp_dir);
-
-    Ok(ctx)
-}
-
-fn benchmark(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
-    let ctx = generate_table_provider(&rt).unwrap();
 
     let sql = "\
         SELECT * FROM zarr_data WHERE \
@@ -134,7 +131,7 @@ fn benchmark(c: &mut Criterion) {
         and date > CAST('2025-09-01' AS DATE)\
     ";
 
-    // Run once with profiling to generate heap profile
+    // Run dhat memory benchmark in closure to avoid criterion profiing
     {
         let _profiler = dhat::Profiler::builder()
                 .trim_backtraces(None)  // minimal output
@@ -147,7 +144,7 @@ fn benchmark(c: &mut Criterion) {
         println!("peak heap: {} bytes", ByteSize(stats.max_bytes as u64));
     }
 
-    // Now run the benchmark
+    // Run criterion benchmarks
     let mut group = c.benchmark_group("datetime_queries");
     group.sample_size(10);  // Minimum is 10 samples
     group.sampling_mode(SamplingMode::Flat);  // Run each benchmark exactly once per sample
@@ -155,13 +152,11 @@ fn benchmark(c: &mut Criterion) {
     group.measurement_time(std::time::Duration::from_secs(2));
 
     group.bench_function("datetime_query", |b| {
-        b.iter(|| {
-            rt.block_on(async {
-                let df = ctx.sql(black_box(sql))
-                    .await
-                    .unwrap();
-                df.collect().await.unwrap()
-            })
+        b.to_async(&rt).iter(|| async {
+            let df = ctx.sql(black_box(sql))
+                .await
+                .unwrap();
+            df.collect().await.unwrap()
         });
     });
 
