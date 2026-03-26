@@ -7,7 +7,8 @@
 //! - Chunks: 1,000,000 elements per chunk (approximately 10MB per chunk)
 //!
 //! The data is generated in a temporary directory that is automatically cleaned up.
-
+//!
+use bytesize::ByteSize;
 use chrono::NaiveDate;
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode};
 use datafusion::prelude::SessionContext;
@@ -23,6 +24,9 @@ use zarrs::array::{ArrayBuilder, DataType, FillValue};
 use zarrs::array_subset::ArraySubset;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_icechunk::AsyncIcechunkStore;
+
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
 
 const SAMPLES_PER_DAY: usize = 10_000;
 const MS_PER_DAY: i64 = 24 * 60 * 60 * 1000; // 86,400,000 milliseconds
@@ -124,17 +128,31 @@ fn benchmark(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let ctx = generate_table_provider(&rt).unwrap();
 
-    let mut group = c.benchmark_group("datetime_queries");
-    group.sample_size(10);  // Minimum is 10 samples
-    group.sampling_mode(SamplingMode::Flat);  // Run each benchmark exactly once per sample
-    group.warm_up_time(std::time::Duration::from_secs(1));
-    group.measurement_time(std::time::Duration::from_secs(2));
-
     let sql = "\
         SELECT * FROM zarr_data WHERE \
         date < CAST('2025-10-11' AS DATE) \
         and date > CAST('2025-09-01' AS DATE)\
     ";
+
+    // Run once with profiling to generate heap profile
+    {
+        let _profiler = dhat::Profiler::builder()
+                .trim_backtraces(None)  // minimal output
+                .build();
+        rt.block_on(async {
+            let df = ctx.sql(sql).await.unwrap();
+            let _results = df.collect().await.unwrap();
+        });
+        let stats = dhat::HeapStats::get();
+        println!("peak heap: {} bytes", ByteSize(stats.max_bytes as u64));
+    }
+
+    // Now run the benchmark
+    let mut group = c.benchmark_group("datetime_queries");
+    group.sample_size(10);  // Minimum is 10 samples
+    group.sampling_mode(SamplingMode::Flat);  // Run each benchmark exactly once per sample
+    group.warm_up_time(std::time::Duration::from_secs(1));
+    group.measurement_time(std::time::Duration::from_secs(2));
 
     group.bench_function("datetime_query", |b| {
         b.iter(|| {

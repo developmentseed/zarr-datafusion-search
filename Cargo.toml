@@ -24,8 +24,10 @@ zarrs_object_store = "0.5.0"
 zarrs_storage = { version = "0.4.0", features = ["async"] }
 
 [dev-dependencies]
+bytesize = "1"
 chrono = "0.4.44"
 criterion = "0.5.1"
+dhat = "0.3"
 geo = "0.31"
 geoarrow-array = "0.7.0"
 rand = "0.8"
@@ -36,3 +38,4 @@ wkb = "0.9"
 [[bench]]
 name = "datetime_filter"
 harness = false
+test = false
