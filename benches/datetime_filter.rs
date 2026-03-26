@@ -10,10 +10,10 @@
 //!
 use bytesize::ByteSize;
 use chrono::NaiveDate;
-use criterion::{criterion_group, criterion_main, Criterion, SamplingMode};
+use criterion::{Criterion, SamplingMode, criterion_group, criterion_main};
 use datafusion::prelude::SessionContext;
-use icechunk::{repository::VersionInfo, ObjectStorage, Repository};
 use icechunk::session::Session;
+use icechunk::{ObjectStorage, Repository, repository::VersionInfo};
 use rand::Rng;
 use std::collections::HashMap;
 use std::hint::black_box;
@@ -32,7 +32,6 @@ static ALLOC: dhat::Alloc = dhat::Alloc;
 const SAMPLES_PER_DAY: usize = 10_000;
 const MS_PER_DAY: i64 = 24 * 60 * 60 * 1000; // 86,400,000 milliseconds
 const CHUNK_SIZE: u64 = 1_000_000; // 1M elements per chunk
-
 
 fn generate_icechunk_store(rt: &Runtime) -> Result<(Session, TempDir), Box<dyn std::error::Error>> {
     let _guard = rt.enter();
@@ -71,7 +70,6 @@ fn generate_icechunk_store(rt: &Runtime) -> Result<(Session, TempDir), Box<dyn s
             let random_ms_offset = rng.gen_range(0..MS_PER_DAY);
             date_data.push(day_ms + random_ms_offset);
         }
-
     }
 
     let array_shape = vec![date_data.len() as u64];
@@ -105,7 +103,9 @@ fn generate_icechunk_store(rt: &Runtime) -> Result<(Session, TempDir), Box<dyn s
     })?;
 
     // Open a readonly session to read the data back
-    let readonly_session = rt.block_on(repo.readonly_session(&VersionInfo::BranchTipRef("main".to_string()))).unwrap();
+    let readonly_session = rt
+        .block_on(repo.readonly_session(&VersionInfo::BranchTipRef("main".to_string())))
+        .unwrap();
     Ok((readonly_session, temp_dir))
 }
 
@@ -124,7 +124,6 @@ fn benchmark(c: &mut Criterion) {
     let ctx = SessionContext::new();
     ctx.register_table("zarr_data", table_provider).unwrap();
 
-
     let sql = "\
         SELECT * FROM zarr_data WHERE \
         date < CAST('2025-10-11' AS DATE) \
@@ -134,8 +133,8 @@ fn benchmark(c: &mut Criterion) {
     // Run dhat memory benchmark in closure to avoid criterion profiing
     {
         let _profiler = dhat::Profiler::builder()
-                .trim_backtraces(None)  // minimal output
-                .build();
+            .trim_backtraces(None) // minimal output
+            .build();
         rt.block_on(async {
             let df = ctx.sql(sql).await.unwrap();
             let _results = df.collect().await.unwrap();
@@ -146,16 +145,14 @@ fn benchmark(c: &mut Criterion) {
 
     // Run criterion benchmarks
     let mut group = c.benchmark_group("datetime_queries");
-    group.sample_size(10);  // Minimum is 10 samples
-    group.sampling_mode(SamplingMode::Flat);  // Run each benchmark exactly once per sample
+    group.sample_size(10); // Minimum is 10 samples
+    group.sampling_mode(SamplingMode::Flat); // Run each benchmark exactly once per sample
     group.warm_up_time(std::time::Duration::from_secs(1));
     group.measurement_time(std::time::Duration::from_secs(2));
 
     group.bench_function("datetime_query", |b| {
         b.to_async(&rt).iter(|| async {
-            let df = ctx.sql(black_box(sql))
-                .await
-                .unwrap();
+            let df = ctx.sql(black_box(sql)).await.unwrap();
             df.collect().await.unwrap()
         });
     });
