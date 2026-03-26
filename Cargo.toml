@@ -24,9 +24,18 @@ zarrs_object_store = "0.5.0"
 zarrs_storage = { version = "0.4.0", features = ["async"] }
 
 [dev-dependencies]
+bytesize = "1"
 chrono = "0.4.44"
+criterion = { version = "0.5.1", features = ["async_tokio"] }
+dhat = "0.3"
 geo = "0.31"
 geoarrow-array = "0.7.0"
+rand = "0.8"
 tempfile = "3"
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
 wkb = "0.9"
+
+[[bench]]
+name = "datetime_filter"
+harness = false
+test = false
