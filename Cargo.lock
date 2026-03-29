@@ -6428,6 +6428,7 @@ dependencies = [
  "icechunk",
  "object_store 0.12.5",
  "rand 0.8.5",
+ "rayon",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",

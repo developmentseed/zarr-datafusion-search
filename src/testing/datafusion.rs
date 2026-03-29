@@ -10,7 +10,7 @@ use tokio::runtime::Handle;
 use crate::table_provider::ZarrTableProvider;
 use crate::testing::utils::get_local_icechunk_store;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_datafusion() {
     let ctx = SessionContext::new();
 
@@ -28,7 +28,6 @@ async fn test_datafusion() {
 
     let table_provider = Arc::new(
         ZarrTableProvider::new_icechunk(icechunk_session, Handle::current(), "/meta")
-            .await
             .unwrap(),
     );
     ctx.register_table("zarr_data", table_provider).unwrap();
