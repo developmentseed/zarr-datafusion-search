@@ -57,7 +57,7 @@ impl PyZarrTable {
             let table_provider = ZarrTableProvider::new_icechunk(
                 icechunk_session,
                 runtime.handle().clone(),
-                group_path,
+                &group_path,
             )
             .await
             .unwrap();
