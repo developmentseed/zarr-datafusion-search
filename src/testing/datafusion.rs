@@ -28,6 +28,7 @@ async fn test_datafusion() {
 
     let table_provider = Arc::new(
         ZarrTableProvider::new_icechunk(icechunk_session, Handle::current(), "/meta")
+            .await
             .unwrap(),
     );
     ctx.register_table("zarr_data", table_provider).unwrap();

@@ -6429,6 +6429,7 @@ dependencies = [
  "object_store 0.12.5",
  "rand 0.8.5",
  "rayon",
+ "rayon_iter_concurrent_limit",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
