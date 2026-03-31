@@ -6556,6 +6556,7 @@ dependencies = [
  "geodatafusion",
  "icechunk",
  "object_store 0.12.5",
+ "rayon",
  "thiserror 2.0.18",
  "tokio",
  "zarrs",
@@ -6677,7 +6678,8 @@ dependencies = [
 [[package]]
 name = "zarrs_metadata"
 version = "0.6.2"
-source = "git+https://github.com/zarrs/zarrs?rev=b1a7a19fd249eca1edce493081aed669e6fd2463#b1a7a19fd249eca1edce493081aed669e6fd2463"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "579803c6537c827b366fcd6cb0d78469f6a2978e6ab9768ce67526fdb85d7205"
 dependencies = [
  "derive_more",
  "half",

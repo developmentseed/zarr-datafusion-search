@@ -27,7 +27,6 @@ use datafusion::prelude::SessionContext;
 use futures::TryStreamExt;
 use object_store::ObjectStore;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use rayon_iter_concurrent_limit::iter_concurrent_limit;
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Debug};
@@ -565,16 +564,11 @@ fn scan_chunks_sync(
         None => return Err(ZarrDataFusionError::Custom("No arrays to scan".into())),
     };
 
-    let chunk_concurrent_limit: usize = 4;
-    let indices =
-        ArraySubset::new_with_ranges(&chunk_grid_shape.iter().map(|&n| 0..n).collect::<Vec<_>>())
-            .indices();
+    let chunks = ArraySubset::new_with_ranges(&chunk_grid_shape.iter().map(|&n| 0..n).collect::<Vec<_>>());
+    let indices = chunks.indices();
 
-    iter_concurrent_limit!(
-        chunk_concurrent_limit,
-        indices,
-        filter_map,
-        |chunk_indices: Vec<u64>| {
+    indices.into_par_iter()
+        .filter_map(|chunk_indices| {
             process_chunk(
                 &arrays,
                 &table_schema,
@@ -584,9 +578,8 @@ fn scan_chunks_sync(
                 &chunk_indices,
             )
             .transpose()
-        }
-    )
-    .collect::<ZarrDataFusionResult<Vec<_>>>()
+        })
+        .collect::<ZarrDataFusionResult<Vec<_>>>()
 }
 
 async fn scan_chunks_async(
