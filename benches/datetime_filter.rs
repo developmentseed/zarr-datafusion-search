@@ -115,7 +115,6 @@ fn benchmark(c: &mut Criterion) {
     let table_provider = Arc::new(
         rt.block_on(ZarrTableProvider::new_icechunk(
             session,
-            rt.handle().clone(),
             "/meta",
         ))
         .unwrap(),
