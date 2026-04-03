@@ -37,12 +37,9 @@ impl PyZarrTable {
         dbg!(icechunk_session.config());
 
         future_into_py(py, async move {
-            let table_provider = ZarrTableProvider::new_icechunk(
-                icechunk_session,
-                &group_path,
-            )
-            .await
-            .unwrap();
+            let table_provider = ZarrTableProvider::new_icechunk(icechunk_session, &group_path)
+                .await
+                .unwrap();
 
             Ok(Self {
                 provider: Arc::new(table_provider),
