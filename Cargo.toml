@@ -22,7 +22,6 @@ zarrs_metadata = "0.6.2"
 zarrs_icechunk = "0.4.1"
 zarrs_object_store = "0.5.0"
 zarrs_storage = { version = "0.4.0", features = ["async"] }
-rayon = "1.11.0"
 
 [dev-dependencies]
 bytesize = "1"

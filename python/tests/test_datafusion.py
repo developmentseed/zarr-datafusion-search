@@ -6,23 +6,14 @@ from obstore.store import LocalStore
 from zarr_datafusion_search import ZarrTable
 
 
-def test_zarr_scan(session_zarr_store):
-    """Test basic zarr scanning with DataFusion."""
-    ctx = SessionContext()
-    zarr_table = ZarrTable(str(session_zarr_store), "/meta")
-
-    ctx.register_table("zarr_data", zarr_table)
-
-    sql = "SELECT * FROM zarr_data;"
-    df = ctx.sql(sql)
-    df.show()
-
-
-def test_spatial_functions_registered(session_zarr_store):
+@pytest.mark.asyncio
+async def test_spatial_functions_registered(session_zarr_store):
     """Test that spatial functions work with zarr data."""
     ctx = SessionContext()
     register_all(ctx)
-    zarr_table = ZarrTable(str(session_zarr_store), "/meta")
+
+    store = LocalStore(session_zarr_store)
+    zarr_table = await ZarrTable.from_obstore(store, "/meta")
 
     ctx.register_table("zarr_data", zarr_table)
     sql = (

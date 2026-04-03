@@ -20,21 +20,6 @@ pub struct PyZarrTable {
 
 #[pymethods]
 impl PyZarrTable {
-    #[new]
-    pub fn new(zarr_path: String, group_path: PyBackedStr) -> PyResult<Self> {
-        let table_provider =
-            ZarrTableProvider::new_filesystem(zarr_path, &group_path).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                    "Failed to create ZarrTableProvider: {}",
-                    e
-                ))
-            })?;
-        Ok(PyZarrTable {
-            provider: Arc::new(table_provider),
-            _ctx: Arc::new(SessionContext::new()),
-        })
-    }
-
     #[classmethod]
     pub(crate) fn from_icechunk<'py>(
         _cls: &Bound<'py, PyType>,

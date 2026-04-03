@@ -113,11 +113,8 @@ fn benchmark(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let (session, _temp_dir) = generate_icechunk_store(&rt).unwrap();
     let table_provider = Arc::new(
-        rt.block_on(ZarrTableProvider::new_icechunk(
-            session,
-            "/meta",
-        ))
-        .unwrap(),
+        rt.block_on(ZarrTableProvider::new_icechunk(session, "/meta"))
+            .unwrap(),
     );
 
     let ctx = SessionContext::new();
