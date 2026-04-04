@@ -30,6 +30,7 @@ use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Debug};
 use std::sync::Arc;
+use tokio::runtime::Handle;
 use tokio::sync::Semaphore;
 use zarrs::array::Array;
 use zarrs::array_subset::ArraySubset;
@@ -58,7 +59,10 @@ impl ZarrTableProvider {
         group_path: &str,
     ) -> ZarrDataFusionResult<Self> {
         let store = Arc::new(AsyncIcechunkStore::new(icechunk_session));
-        let zarr_backend = IcechunkZarrBackend { store };
+        let zarr_backend = IcechunkZarrBackend {
+            store,
+            handle: Handle::current(),
+        };
         let schema = zarr_backend.infer_group_schema(group_path).await?;
         Ok(Self {
             schema,
@@ -129,6 +133,7 @@ impl TableProvider for ZarrTableProvider {
 #[derive(Clone)]
 struct IcechunkZarrBackend {
     store: Arc<dyn AsyncReadableListableStorageTraits>,
+    handle: Handle,
 }
 
 impl IcechunkZarrBackend {
@@ -141,12 +146,14 @@ impl IcechunkZarrBackend {
 #[derive(Clone)]
 struct AsyncZarrBackend {
     store: Arc<dyn AsyncReadableListableStorageTraits>,
+    handle: Handle,
 }
 
 impl AsyncZarrBackend {
     fn new_object_store<T: ObjectStore>(store: T) -> Self {
         AsyncZarrBackend {
             store: Arc::new(zarrs_object_store::AsyncObjectStore::new(store)),
+            handle: Handle::current(),
         }
     }
 
@@ -262,24 +269,26 @@ impl ExecutionPlan for ZarrExec {
         let filter_col_names = Self::filter_column_names(&filters);
         let group_path = self.group_path.clone();
 
-        let store = match &backend {
-            ZarrBackend::Async(b) => b.store.clone(),
-            ZarrBackend::Icechunk(b) => b.store.clone(),
+        let (store, handle) = match &backend {
+            ZarrBackend::Async(b) => (b.store.clone(), b.handle.clone()),
+            ZarrBackend::Icechunk(b) => (b.store.clone(), b.handle.clone()),
         };
 
         let stream = RecordBatchStreamAdapter::new(
             self.projected_schema.clone(),
             futures::stream::once(async move {
-                scan_chunks_async(
-                    store,
-                    group_path,
-                    table_schema,
-                    projected_schema,
-                    filters,
-                    filter_col_names,
-                )
-                .await
-                .map_err(|e: ZarrDataFusionError| datafusion::error::DataFusionError::from(e))
+                handle
+                    .spawn(scan_chunks_async(
+                        store,
+                        group_path,
+                        table_schema,
+                        projected_schema,
+                        filters,
+                        filter_col_names,
+                    ))
+                    .await
+                    .map_err(|e| datafusion::error::DataFusionError::External(Box::new(e)))?
+                    .map_err(|e: ZarrDataFusionError| datafusion::error::DataFusionError::from(e))
             })
             .map_ok(|batches| futures::stream::iter(batches.into_iter().map(Ok)))
             .try_flatten(),
