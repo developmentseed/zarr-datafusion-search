@@ -6,8 +6,6 @@
 //! - Total: 54,790,000 datetime64[ms] values
 //! - Chunks: 1,000,000 elements per chunk (approximately 10MB per chunk)
 //!
-//! The data is generated in a temporary directory that is automatically cleaned up.
-//!
 use bytesize::ByteSize;
 use chrono::NaiveDate;
 use criterion::{Criterion, SamplingMode, criterion_group, criterion_main};
@@ -33,14 +31,13 @@ const SAMPLES_PER_DAY: usize = 10_000;
 const MS_PER_DAY: i64 = 24 * 60 * 60 * 1000; // 86,400,000 milliseconds
 const CHUNK_SIZE: u64 = 1_000_000; // 1M elements per chunk
 
-fn generate_icechunk_store(rt: &Runtime) -> Result<(Session, TempDir), Box<dyn std::error::Error>> {
+pub fn generate_icechunk_store(
+    rt: &Runtime,
+    storage: Arc<ObjectStorage>,
+) -> Result<Session, Box<dyn std::error::Error>> {
     let _guard = rt.enter();
 
-    let temp_dir = TempDir::new()?;
-    let store_path = temp_dir.path();
-
-    let storage = rt.block_on(ObjectStorage::new_local_filesystem(store_path))?;
-    let repo = rt.block_on(Repository::create(None, Arc::new(storage), HashMap::new()))?;
+    let repo = rt.block_on(Repository::create(None, storage, HashMap::new()))?;
     let session = rt.block_on(repo.writable_session("main")).unwrap();
     let store = Arc::new(AsyncIcechunkStore::new(session.clone()));
 
@@ -106,26 +103,74 @@ fn generate_icechunk_store(rt: &Runtime) -> Result<(Session, TempDir), Box<dyn s
     let readonly_session = rt
         .block_on(repo.readonly_session(&VersionInfo::BranchTipRef("main".to_string())))
         .unwrap();
-    Ok((readonly_session, temp_dir))
+    Ok(readonly_session)
 }
 
-fn benchmark(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
-    let (session, _temp_dir) = generate_icechunk_store(&rt).unwrap();
-    let table_provider = Arc::new(
-        rt.block_on(ZarrTableProvider::new_icechunk(session, "/meta"))
-            .unwrap(),
-    );
+fn generate_icechunk_store_local(
+    rt: &Runtime,
+) -> Result<(Session, TempDir), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+    let storage = rt.block_on(ObjectStorage::new_local_filesystem(temp_dir.path()))?;
+    let session = generate_icechunk_store(rt, Arc::new(storage))?;
+    Ok((session, temp_dir))
+}
 
-    let ctx = SessionContext::new();
-    ctx.register_table("zarr_data", table_provider).unwrap();
+/// Helper function to create an S3 storage
+/// Uses AWS default credential chain (environment variables, instance profile, ~/.aws/credentials, etc.)
+fn _generate_icechunk_store_s3(
+    rt: &Runtime,
+    bucket: String,
+    prefix: String,
+) -> Result<Session, Box<dyn std::error::Error>> {
+    let storage = rt.block_on(ObjectStorage::new_s3(
+        bucket,
+        Some(prefix),
+        None, // credentials - uses default AWS credential chain
+        None, // config - uses default S3 options
+    ))?;
+    let session = generate_icechunk_store(rt, Arc::new(storage))?;
+    Ok(session)
+}
 
+fn run_datetime_benchmark(
+    c: &mut Criterion,
+    rt: &Runtime,
+    ctx: &SessionContext,
+    group_name: &str,
+    bench_name: &str,
+) {
     let sql = "\
         SELECT * FROM zarr_data WHERE \
         date < CAST('2025-10-11' AS DATE) \
         and date > CAST('2025-09-01' AS DATE)\
     ";
 
+    // Run criterion benchmarks
+    let mut group = c.benchmark_group(group_name);
+    group.sample_size(10); // Minimum is 10 samples
+    group.sampling_mode(SamplingMode::Flat); // Run each benchmark exactly once per sample
+    group.warm_up_time(std::time::Duration::from_secs(1));
+    group.measurement_time(std::time::Duration::from_secs(2));
+
+    group.bench_function(bench_name, |b| {
+        b.to_async(rt).iter(|| async {
+            let df = ctx.sql(black_box(sql)).await.unwrap();
+            df.collect().await.unwrap()
+        });
+    });
+
+    group.finish();
+}
+
+fn run_memory_profile(
+    rt: &Runtime,
+    ctx: &SessionContext,
+) {
+    let sql = "\
+        SELECT * FROM zarr_data WHERE \
+        date < CAST('2025-10-11' AS DATE) \
+        and date > CAST('2025-09-01' AS DATE)\
+    ";
     // Run dhat memory benchmark in closure to avoid criterion profiing
     {
         let _profiler = dhat::Profiler::builder()
@@ -138,23 +183,49 @@ fn benchmark(c: &mut Criterion) {
         let stats = dhat::HeapStats::get();
         println!("peak heap: {} bytes", ByteSize(stats.max_bytes as u64));
     }
-
-    // Run criterion benchmarks
-    let mut group = c.benchmark_group("datetime_queries");
-    group.sample_size(10); // Minimum is 10 samples
-    group.sampling_mode(SamplingMode::Flat); // Run each benchmark exactly once per sample
-    group.warm_up_time(std::time::Duration::from_secs(1));
-    group.measurement_time(std::time::Duration::from_secs(2));
-
-    group.bench_function("datetime_query", |b| {
-        b.to_async(&rt).iter(|| async {
-            let df = ctx.sql(black_box(sql)).await.unwrap();
-            df.collect().await.unwrap()
-        });
-    });
-
-    group.finish();
 }
 
-criterion_group!(benches, benchmark);
-criterion_main!(benches);
+fn benchmark_local_icechunk(c: &mut Criterion) {
+    let rt = Runtime::new().unwrap();
+    let (session, _temp_dir) = generate_icechunk_store_local(&rt).unwrap();
+    let table_provider = Arc::new(
+        rt.block_on(ZarrTableProvider::new_icechunk(session, "/meta"))
+            .unwrap(),
+    );
+
+    let ctx = SessionContext::new();
+    ctx.register_table("zarr_data", table_provider).unwrap();
+
+    run_memory_profile(&rt, &ctx); 
+    run_datetime_benchmark(c, &rt, &ctx, "datetime_queries", "datetime_query_local");
+}
+
+fn benchmark_s3_icechunk(c: &mut Criterion) {
+    let bucket = "zarr-datafusion-search".to_string();
+    let prefix = "".to_string();
+
+    let rt = Runtime::new().unwrap();
+    let storage = rt.block_on(ObjectStorage::new_s3(
+        bucket,
+        Some(prefix),
+        None, // credentials - uses default AWS credential chain
+        None, // config - uses default S3 options
+    )).unwrap();
+    let repo = rt.block_on(Repository::open_or_create(None, Arc::new(storage), HashMap::new())).unwrap();
+    let session = rt
+        .block_on(repo.readonly_session(&VersionInfo::BranchTipRef("main".to_string())))
+        .unwrap();
+
+    let table_provider = Arc::new(
+        rt.block_on(ZarrTableProvider::new_icechunk(session, "/meta"))
+            .unwrap(),
+    );
+
+    let ctx = SessionContext::new();
+    ctx.register_table("zarr_data", table_provider).unwrap();
+    run_datetime_benchmark(c, &rt, &ctx, "datetime_queries", "datetime_query_s3");
+}
+
+criterion_group!(benches, benchmark_local_icechunk);
+criterion_group!(benches_s3, benchmark_s3_icechunk);
+criterion_main!(benches, benches_s3);
