@@ -1,13 +1,15 @@
 mod common;
 
-use common::{generate_icechunk_store_local, run_bench, run_memory_profile, DATETIME_SQL};
+use common::{generate_icechunk_store_local, run_memory_profile, run_bench, BBOX_SQL};
 use criterion::{Criterion, criterion_group, criterion_main};
 use datafusion::prelude::SessionContext;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use zarr_datafusion_search::table_provider::ZarrTableProvider;
 
-fn datetime_bench_local(c: &mut Criterion) {
+
+
+fn bbox_bench_local(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let (session, _temp_dir) = generate_icechunk_store_local(&rt).unwrap();
     let table_provider = Arc::new(
@@ -16,11 +18,12 @@ fn datetime_bench_local(c: &mut Criterion) {
     );
 
     let ctx = SessionContext::new();
+    geodatafusion::register(&ctx);
     ctx.register_table("zarr_data", table_provider).unwrap();
 
-    run_memory_profile(&rt, &ctx, DATETIME_SQL);
-    run_bench(c, &rt, &ctx, "datetime_bench_local", "datetime_bench_local", DATETIME_SQL);
+    run_memory_profile(&rt, &ctx, BBOX_SQL);
+    run_bench(c, &rt, &ctx, "bbox_bench_local", "bbox_bench_local", BBOX_SQL);
 }
 
-criterion_group!(benches_local, datetime_bench_local);
+criterion_group!(benches_local, bbox_bench_local);
 criterion_main!(benches_local);

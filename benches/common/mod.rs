@@ -134,19 +134,14 @@ pub fn generate_icechunk_store_local(
     Ok((session, temp_dir))
 }
 
-pub fn run_datetime_bench(
+pub fn run_bench(
     c: &mut Criterion,
     rt: &Runtime,
     ctx: &SessionContext,
     group_name: &str,
     bench_name: &str,
+    sql: &str,
 ) {
-    let sql = "\
-        SELECT * FROM zarr_data WHERE \
-        date < CAST('2025-10-11' AS DATE) \
-        and date > CAST('2025-09-01' AS DATE)\
-    ";
-
     // Run criterion benchmarks
     let mut group = c.benchmark_group(group_name);
     group.sample_size(10); // Minimum is 10 samples
@@ -164,15 +159,11 @@ pub fn run_datetime_bench(
     group.finish();
 }
 
-pub fn run_datetime_memory_profile(
+pub fn run_memory_profile(
     rt: &Runtime,
     ctx: &SessionContext,
+    sql: &str,
 ) {
-    let sql = "\
-        SELECT * FROM zarr_data WHERE \
-        date < CAST('2025-10-11' AS DATE) \
-        and date > CAST('2025-09-01' AS DATE)\
-    ";
     // Run dhat memory benchmark in closure to avoid criterion profiing
     {
         let _profiler = dhat::Profiler::builder()
@@ -187,3 +178,13 @@ pub fn run_datetime_memory_profile(
     }
 }
 
+pub static DATETIME_SQL: &str = "\
+    SELECT date FROM zarr_data WHERE \
+    date < CAST('2025-10-11' AS DATE) \
+    and date > CAST('2025-09-01' AS DATE)\
+";
+
+pub static BBOX_SQL: &str = "\
+    SELECT bbox FROM zarr_data \
+    WHERE ST_Intersects(bbox, ST_GeomFromText('POLYGON((0 -7, 0 7, 5 7, 5 -7, 0 -7))')) \
+";

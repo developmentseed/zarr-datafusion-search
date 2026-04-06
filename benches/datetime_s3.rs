@@ -1,6 +1,6 @@
 mod common;
 
-use common::run_datetime_bench;
+use common::{run_bench, DATETIME_SQL};
 use criterion::{Criterion, criterion_group, criterion_main};
 use datafusion::prelude::SessionContext;
 use icechunk::{ObjectStorage, Repository, repository::VersionInfo};
@@ -32,7 +32,7 @@ fn datetime_bench_s3(c: &mut Criterion) {
 
     let ctx = SessionContext::new();
     ctx.register_table("zarr_data", table_provider).unwrap();
-    run_datetime_bench(c, &rt, &ctx, "datetime_bench_s3", "datetime_bench_s3");
+    run_bench(c, &rt, &ctx, "datetime_bench_s3", "datetime_bench_s3", DATETIME_SQL);
 }
 
 criterion_group!(benches_s3, datetime_bench_s3);
