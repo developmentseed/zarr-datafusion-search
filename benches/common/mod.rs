@@ -1,14 +1,10 @@
-//! Benchmark for icechunk store with ~54.8M datetime values.
-//!
-//! This generates:
-//! - 5,479 days (2010-01-01 to 2025-01-01, approximately 15 years)
-//! - 10,000 random timestamps per day
-//! - Total: 54,790,000 datetime64[ms] values
-//! - Chunks: 1,000,000 elements per chunk (approximately 10MB per chunk)
-//!
+// Common benchmark utilities shared across datetime benchmarks
+// Functions/constants here are used by datetime_local.rs and datetime_s3.rs
+#![allow(dead_code)]
+
 use bytesize::ByteSize;
 use chrono::NaiveDate;
-use criterion::{Criterion, SamplingMode, criterion_group, criterion_main};
+use criterion::{Criterion, SamplingMode};
 use datafusion::prelude::SessionContext;
 use icechunk::session::Session;
 use icechunk::{ObjectStorage, Repository, repository::VersionInfo};
@@ -18,11 +14,13 @@ use std::hint::black_box;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
-use zarr_datafusion_search::table_provider::ZarrTableProvider;
 use zarrs::array::{ArrayBuilder, DataType, FillValue};
 use zarrs::array_subset::ArraySubset;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_icechunk::AsyncIcechunkStore;
+
+mod s2_geometry;
+use s2_geometry::generate_s2_wkb_polygons;
 
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
@@ -31,7 +29,12 @@ const SAMPLES_PER_DAY: usize = 10_000;
 const MS_PER_DAY: i64 = 24 * 60 * 60 * 1000; // 86,400,000 milliseconds
 const CHUNK_SIZE: u64 = 1_000_000; // 1M elements per chunk
 
-pub fn generate_icechunk_store(
+// This generates:
+// - 5,479 days (2010-01-01 to 2025-01-01, approximately 15 years)
+// - 10,000 random timestamps per day
+// - Total: 54,790,000 datetime64[ms] values
+// - Chunks: 1,000,000 elements per chunk (approximately 10MB per chunk)
+fn generate_icechunk_store(
     rt: &Runtime,
     storage: Arc<ObjectStorage>,
 ) -> Result<Session, Box<dyn std::error::Error>> {
@@ -74,7 +77,7 @@ pub fn generate_icechunk_store(
 
     let date_array = ArrayBuilder::new(
         array_shape.clone(),
-        chunk_shape,
+        chunk_shape.clone(),
         DataType::NumpyDateTime64 {
             unit: NumpyTimeUnit::Millisecond,
             scale_factor: 1.try_into().unwrap(),
@@ -90,12 +93,28 @@ pub fn generate_icechunk_store(
         &date_data,
     ))?;
 
+    let bbox_data = generate_s2_wkb_polygons(array_shape[0] as usize);
+    let bbox_array = ArrayBuilder::new(
+        array_shape.clone(),
+        chunk_shape.clone(),
+        DataType::Bytes,
+        FillValue::from(vec![])
+    )
+    .build(store.clone(), "/meta/bbox")?;
+
+    rt.block_on(bbox_array.async_store_metadata())?;
+
+    rt.block_on(bbox_array.async_store_array_subset_elements(
+        &ArraySubset::new_with_shape(array_shape.clone()),
+        &bbox_data,
+    ))?;
+ 
     rt.block_on(async {
         store
             .session()
             .write()
             .await
-            .commit("Large dataset with ~36.5M datetime values", None)
+            .commit("Large dataset with millions of values", None)
             .await
     })?;
 
@@ -106,7 +125,7 @@ pub fn generate_icechunk_store(
     Ok(readonly_session)
 }
 
-fn generate_icechunk_store_local(
+pub fn generate_icechunk_store_local(
     rt: &Runtime,
 ) -> Result<(Session, TempDir), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
@@ -115,24 +134,7 @@ fn generate_icechunk_store_local(
     Ok((session, temp_dir))
 }
 
-/// Helper function to create an S3 storage
-/// Uses AWS default credential chain (environment variables, instance profile, ~/.aws/credentials, etc.)
-fn _generate_icechunk_store_s3(
-    rt: &Runtime,
-    bucket: String,
-    prefix: String,
-) -> Result<Session, Box<dyn std::error::Error>> {
-    let storage = rt.block_on(ObjectStorage::new_s3(
-        bucket,
-        Some(prefix),
-        None, // credentials - uses default AWS credential chain
-        None, // config - uses default S3 options
-    ))?;
-    let session = generate_icechunk_store(rt, Arc::new(storage))?;
-    Ok(session)
-}
-
-fn run_datetime_benchmark(
+pub fn run_datetime_bench(
     c: &mut Criterion,
     rt: &Runtime,
     ctx: &SessionContext,
@@ -162,7 +164,7 @@ fn run_datetime_benchmark(
     group.finish();
 }
 
-fn run_memory_profile(
+pub fn run_datetime_memory_profile(
     rt: &Runtime,
     ctx: &SessionContext,
 ) {
@@ -185,47 +187,3 @@ fn run_memory_profile(
     }
 }
 
-fn benchmark_local_icechunk(c: &mut Criterion) {
-    let rt = Runtime::new().unwrap();
-    let (session, _temp_dir) = generate_icechunk_store_local(&rt).unwrap();
-    let table_provider = Arc::new(
-        rt.block_on(ZarrTableProvider::new_icechunk(session, "/meta"))
-            .unwrap(),
-    );
-
-    let ctx = SessionContext::new();
-    ctx.register_table("zarr_data", table_provider).unwrap();
-
-    run_memory_profile(&rt, &ctx); 
-    run_datetime_benchmark(c, &rt, &ctx, "datetime_queries", "datetime_query_local");
-}
-
-fn benchmark_s3_icechunk(c: &mut Criterion) {
-    let bucket = "zarr-datafusion-search".to_string();
-    let prefix = "".to_string();
-
-    let rt = Runtime::new().unwrap();
-    let storage = rt.block_on(ObjectStorage::new_s3(
-        bucket,
-        Some(prefix),
-        None, // credentials - uses default AWS credential chain
-        None, // config - uses default S3 options
-    )).unwrap();
-    let repo = rt.block_on(Repository::open_or_create(None, Arc::new(storage), HashMap::new())).unwrap();
-    let session = rt
-        .block_on(repo.readonly_session(&VersionInfo::BranchTipRef("main".to_string())))
-        .unwrap();
-
-    let table_provider = Arc::new(
-        rt.block_on(ZarrTableProvider::new_icechunk(session, "/meta"))
-            .unwrap(),
-    );
-
-    let ctx = SessionContext::new();
-    ctx.register_table("zarr_data", table_provider).unwrap();
-    run_datetime_benchmark(c, &rt, &ctx, "datetime_queries", "datetime_query_s3");
-}
-
-criterion_group!(benches, benchmark_local_icechunk);
-criterion_group!(benches_s3, benchmark_s3_icechunk);
-criterion_main!(benches, benches_s3);
