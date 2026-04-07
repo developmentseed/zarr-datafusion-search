@@ -325,18 +325,14 @@ async fn scan_chunks_async(
         HashMap::new();
     for col_name in &all_cols {
         let path = format!("{group}/{col_name}");
-        let array = Array::async_open(
-            Arc::new(store.clone()),
-            &path,
-        )
-        .await?;
+        let array = Array::async_open(Arc::new(store.clone()), &path).await?;
         arrays.insert(col_name.clone(), array);
     }
-
-    let chunk_grid_shape = match arrays.values().next() {
-        Some(a) => a.chunk_grid_shape(),
-        None => return Err(ZarrDataFusionError::Custom("No arrays to scan".into())),
-    };
+    let chunk_grid_shape = arrays
+        .values()
+        .next()
+        .map(|a| a.chunk_grid_shape())
+        .ok_or(ZarrDataFusionError::Custom("No arrays to scan".into()))?;
 
     let ranges: Vec<std::ops::Range<u64>> = chunk_grid_shape.iter().map(|&n| 0..n).collect();
 
