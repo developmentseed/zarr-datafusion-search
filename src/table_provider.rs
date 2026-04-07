@@ -325,7 +325,7 @@ async fn scan_chunks_async(
         HashMap::new();
     for col_name in &all_cols {
         let path = format!("{group}/{col_name}");
-        let array = Array::<Arc<dyn AsyncReadableListableStorageTraits>>::async_open(
+        let array = Array::async_open(
             Arc::new(store.clone()),
             &path,
         )
