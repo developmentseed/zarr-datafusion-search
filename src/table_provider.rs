@@ -26,6 +26,8 @@ use datafusion::physical_plan::{
 use datafusion::prelude::SessionContext;
 use futures::TryStreamExt;
 use object_store::ObjectStore;
+#[cfg(test)]
+use object_store::local::LocalFileSystem;
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Debug};
@@ -357,7 +359,10 @@ async fn scan_chunks_async(
             let semaphore = semaphore.clone();
 
             tokio::task::spawn(async move {
-                let _permit = semaphore.acquire().await.unwrap();
+                let _permit = semaphore
+                    .acquire()
+                    .await
+                    .map_err(|_| ZarrDataFusionError::Custom("Semaphore closed".into()))?;
                 process_chunk_async(
                     &arrays,
                     &table_schema,
@@ -667,7 +672,7 @@ mod tests {
     async fn test_basic_table_provider() {
         let wrapper = get_local_zarr_store().await;
         let path = wrapper.get_store_path();
-        let local_fs = object_store::local::LocalFileSystem::new_with_prefix(path).unwrap();
+        let local_fs = LocalFileSystem::new_with_prefix(path).unwrap();
         let provider = ZarrTableProvider::new_object_store(local_fs, "/meta")
             .await
             .unwrap();
@@ -684,7 +689,7 @@ mod tests {
     async fn test_table_provider_with_sql() {
         let wrapper = get_local_zarr_store().await;
         let path = wrapper.get_store_path();
-        let local_fs = object_store::local::LocalFileSystem::new_with_prefix(path).unwrap();
+        let local_fs = LocalFileSystem::new_with_prefix(path).unwrap();
         let provider = ZarrTableProvider::new_object_store(local_fs, "/meta")
             .await
             .unwrap();
@@ -714,7 +719,7 @@ mod tests {
         let path = wrapper.get_store_path();
         let ctx = SessionContext::new();
         register_spatial_functions(&ctx).expect("Failed to register spatial functions");
-        let local_fs = object_store::local::LocalFileSystem::new_with_prefix(path).unwrap();
+        let local_fs = LocalFileSystem::new_with_prefix(path).unwrap();
         let provider = ZarrTableProvider::new_object_store(local_fs, "/meta")
             .await
             .unwrap();
@@ -746,7 +751,7 @@ mod tests {
         let path = wrapper.get_store_path();
         let ctx = SessionContext::new();
         register_spatial_functions(&ctx).expect("Failed to register spatial functions");
-        let local_fs = object_store::local::LocalFileSystem::new_with_prefix(path).unwrap();
+        let local_fs = LocalFileSystem::new_with_prefix(path).unwrap();
         let provider = ZarrTableProvider::new_object_store(local_fs, "/meta")
             .await
             .unwrap();
@@ -767,7 +772,7 @@ mod tests {
         let path = wrapper.get_store_path();
         let ctx = SessionContext::new();
         register_spatial_functions(&ctx).expect("Failed to register spatial functions");
-        let local_fs = object_store::local::LocalFileSystem::new_with_prefix(path).unwrap();
+        let local_fs = LocalFileSystem::new_with_prefix(path).unwrap();
         let provider = ZarrTableProvider::new_object_store(local_fs, "/meta")
             .await
             .unwrap();
