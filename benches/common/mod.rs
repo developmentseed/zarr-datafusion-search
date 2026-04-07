@@ -14,8 +14,8 @@ use std::hint::black_box;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
+use zarrs::array::codec::{BloscCodec, BloscCompressionLevel, BloscCompressor, BloscShuffleMode};
 use zarrs::array::{ArrayBuilder, DataType, FillValue};
-use zarrs::array::codec::{BloscCodec, BloscCompressor, BloscCompressionLevel, BloscShuffleMode};
 use zarrs::array_subset::ArraySubset;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_icechunk::AsyncIcechunkStore;
@@ -84,15 +84,19 @@ fn generate_icechunk_store(
     let array_shape = vec![date_data.len() as u64];
     let chunk_shape = vec![CHUNK_SIZE];
 
-    if matches!(arrays, ArraysToGenerate::DatetimeOnly | ArraysToGenerate::Both) {
+    if matches!(
+        arrays,
+        ArraysToGenerate::DatetimeOnly | ArraysToGenerate::Both
+    ) {
         let date_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
             BloscCodec::new(
                 BloscCompressor::Zstd,
                 BloscCompressionLevel::try_from(9).unwrap(),
                 None,
                 BloscShuffleMode::NoShuffle,
-                None
-            ).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?
+                None,
+            )
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?,
         );
 
         let date_array = ArrayBuilder::new(
@@ -124,15 +128,16 @@ fn generate_icechunk_store(
                 BloscCompressionLevel::try_from(9).unwrap(),
                 None, // no typesize for variable-length data
                 BloscShuffleMode::NoShuffle,
-                None
-            ).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?
+                None,
+            )
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?,
         );
 
         let bbox_array = ArrayBuilder::new(
             array_shape.clone(),
             chunk_shape.clone(),
             DataType::Bytes,
-            FillValue::from(vec![])
+            FillValue::from(vec![]),
         )
         .bytes_to_bytes_codecs(vec![bbox_blosc_codec])
         .build(store.clone(), "/meta/bbox")?;
@@ -144,7 +149,7 @@ fn generate_icechunk_store(
             &bbox_data,
         ))?;
     }
- 
+
     rt.block_on(async {
         store
             .session()
@@ -196,11 +201,7 @@ pub fn run_bench(
     group.finish();
 }
 
-pub fn run_memory_profile(
-    rt: &Runtime,
-    ctx: &SessionContext,
-    sql: &str,
-) {
+pub fn run_memory_profile(rt: &Runtime, ctx: &SessionContext, sql: &str) {
     // Run dhat memory benchmark in closure to avoid criterion profiing
     {
         let _profiler = dhat::Profiler::builder()

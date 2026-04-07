@@ -65,12 +65,15 @@ pub fn build_s2_tile_table() -> Vec<Rect> {
     for satellite in 0u8..2 {
         // S2B is offset by half the inter-orbit lon spacing so the two
         // satellites fill interleaved strips.
-        let raan_start = if satellite == 0 { 0.0 } else { LON_SHIFT_DEG / 2.0 };
+        let raan_start = if satellite == 0 {
+            0.0
+        } else {
+            LON_SHIFT_DEG / 2.0
+        };
 
         for orbit_idx in 0..n_orbits {
-            let raan = ((raan_start + orbit_idx as f64 * LON_SHIFT_DEG) + 180.0)
-                .rem_euclid(360.0)
-                - 180.0;
+            let raan =
+                ((raan_start + orbit_idx as f64 * LON_SHIFT_DEG) + 180.0).rem_euclid(360.0) - 180.0;
 
             let mut t = 0.0_f64;
             while t < T_ORBIT_S {
@@ -89,7 +92,6 @@ pub fn build_s2_tile_table() -> Vec<Rect> {
 
     tiles
 }
-
 
 /// Generate `n` WKB Polygon geometries, one per orbital tile, sampled
 /// randomly from the tile table. Each polygon is the tile's rectangular
@@ -113,4 +115,3 @@ pub fn generate_s2_wkb_polygons(n: usize) -> Vec<Vec<u8>> {
 
     out
 }
-

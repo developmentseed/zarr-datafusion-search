@@ -1,6 +1,6 @@
 mod common;
 
-use common::{run_bench, DATETIME_SQL};
+use common::{DATETIME_SQL, run_bench};
 use criterion::{Criterion, criterion_group, criterion_main};
 use datafusion::prelude::SessionContext;
 use icechunk::{ObjectStorage, Repository, repository::VersionInfo};
@@ -14,13 +14,21 @@ fn datetime_bench_s3(c: &mut Criterion) {
     let prefix = "".to_string();
 
     let rt = Runtime::new().unwrap();
-    let storage = rt.block_on(ObjectStorage::new_s3(
-        bucket,
-        Some(prefix),
-        None, // credentials - uses default AWS credential chain
-        None, // config - uses default S3 options
-    )).unwrap();
-    let repo = rt.block_on(Repository::open_or_create(None, Arc::new(storage), HashMap::new())).unwrap();
+    let storage = rt
+        .block_on(ObjectStorage::new_s3(
+            bucket,
+            Some(prefix),
+            None, // credentials - uses default AWS credential chain
+            None, // config - uses default S3 options
+        ))
+        .unwrap();
+    let repo = rt
+        .block_on(Repository::open_or_create(
+            None,
+            Arc::new(storage),
+            HashMap::new(),
+        ))
+        .unwrap();
     let session = rt
         .block_on(repo.readonly_session(&VersionInfo::BranchTipRef("main".to_string())))
         .unwrap();
@@ -32,7 +40,14 @@ fn datetime_bench_s3(c: &mut Criterion) {
 
     let ctx = SessionContext::new();
     ctx.register_table("zarr_data", table_provider).unwrap();
-    run_bench(c, &rt, &ctx, "datetime_bench_s3", "datetime_bench_s3", DATETIME_SQL);
+    run_bench(
+        c,
+        &rt,
+        &ctx,
+        "datetime_bench_s3",
+        "datetime_bench_s3",
+        DATETIME_SQL,
+    );
 }
 
 criterion_group!(benches_s3, datetime_bench_s3);
