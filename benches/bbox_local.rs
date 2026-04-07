@@ -1,6 +1,6 @@
 mod common;
 
-use common::{generate_icechunk_store_local, run_memory_profile, run_bench, BBOX_SQL};
+use common::{generate_icechunk_store_local, run_memory_profile, run_bench, ArraysToGenerate, BBOX_SQL};
 use criterion::{Criterion, criterion_group, criterion_main};
 use datafusion::prelude::SessionContext;
 use std::sync::Arc;
@@ -11,7 +11,7 @@ use zarr_datafusion_search::table_provider::ZarrTableProvider;
 
 fn bbox_bench_local(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    let (session, _temp_dir) = generate_icechunk_store_local(&rt).unwrap();
+    let (session, _temp_dir) = generate_icechunk_store_local(&rt, ArraysToGenerate::BboxOnly).unwrap();
     let table_provider = Arc::new(
         rt.block_on(ZarrTableProvider::new_icechunk(session, "/meta"))
             .unwrap(),

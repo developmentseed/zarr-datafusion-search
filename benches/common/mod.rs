@@ -15,6 +15,7 @@ use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 use zarrs::array::{ArrayBuilder, DataType, FillValue};
+use zarrs::array::codec::{BloscCodec, BloscCompressor, BloscCompressionLevel, BloscShuffleMode};
 use zarrs::array_subset::ArraySubset;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_icechunk::AsyncIcechunkStore;
@@ -29,6 +30,13 @@ const SAMPLES_PER_DAY: usize = 10_000;
 const MS_PER_DAY: i64 = 24 * 60 * 60 * 1000; // 86,400,000 milliseconds
 const CHUNK_SIZE: u64 = 1_000_000; // 1M elements per chunk
 
+#[derive(Debug, Clone, Copy)]
+pub enum ArraysToGenerate {
+    DatetimeOnly,
+    BboxOnly,
+    Both,
+}
+
 // This generates:
 // - 5,479 days (2010-01-01 to 2025-01-01, approximately 15 years)
 // - 10,000 random timestamps per day
@@ -37,6 +45,7 @@ const CHUNK_SIZE: u64 = 1_000_000; // 1M elements per chunk
 fn generate_icechunk_store(
     rt: &Runtime,
     storage: Arc<ObjectStorage>,
+    arrays: ArraysToGenerate,
 ) -> Result<Session, Box<dyn std::error::Error>> {
     let _guard = rt.enter();
 
@@ -75,39 +84,66 @@ fn generate_icechunk_store(
     let array_shape = vec![date_data.len() as u64];
     let chunk_shape = vec![CHUNK_SIZE];
 
-    let date_array = ArrayBuilder::new(
-        array_shape.clone(),
-        chunk_shape.clone(),
-        DataType::NumpyDateTime64 {
-            unit: NumpyTimeUnit::Millisecond,
-            scale_factor: 1.try_into().unwrap(),
-        },
-        FillValue::from(0i64),
-    )
-    .build(store.clone(), "/meta/date")?;
+    if matches!(arrays, ArraysToGenerate::DatetimeOnly | ArraysToGenerate::Both) {
+        let date_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
+            BloscCodec::new(
+                BloscCompressor::Zstd,
+                BloscCompressionLevel::try_from(9).unwrap(),
+                None,
+                BloscShuffleMode::NoShuffle,
+                None
+            ).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?
+        );
 
-    rt.block_on(date_array.async_store_metadata())?;
+        let date_array = ArrayBuilder::new(
+            array_shape.clone(),
+            chunk_shape.clone(),
+            DataType::NumpyDateTime64 {
+                unit: NumpyTimeUnit::Millisecond,
+                scale_factor: 1.try_into().unwrap(),
+            },
+            FillValue::from(0i64),
+        )
+        .bytes_to_bytes_codecs(vec![date_blosc_codec])
+        .build(store.clone(), "/meta/date")?;
 
-    rt.block_on(date_array.async_store_array_subset_elements(
-        &ArraySubset::new_with_shape(array_shape.clone()),
-        &date_data,
-    ))?;
+        rt.block_on(date_array.async_store_metadata())?;
 
-    let bbox_data = generate_s2_wkb_polygons(array_shape[0] as usize);
-    let bbox_array = ArrayBuilder::new(
-        array_shape.clone(),
-        chunk_shape.clone(),
-        DataType::Bytes,
-        FillValue::from(vec![])
-    )
-    .build(store.clone(), "/meta/bbox")?;
+        rt.block_on(date_array.async_store_array_subset_elements(
+            &ArraySubset::new_with_shape(array_shape.clone()),
+            &date_data,
+        ))?;
+    }
 
-    rt.block_on(bbox_array.async_store_metadata())?;
+    if matches!(arrays, ArraysToGenerate::BboxOnly | ArraysToGenerate::Both) {
+        let bbox_data = generate_s2_wkb_polygons(array_shape[0] as usize);
 
-    rt.block_on(bbox_array.async_store_array_subset_elements(
-        &ArraySubset::new_with_shape(array_shape.clone()),
-        &bbox_data,
-    ))?;
+        let bbox_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
+            BloscCodec::new(
+                BloscCompressor::Zstd,
+                BloscCompressionLevel::try_from(9).unwrap(),
+                None, // no typesize for variable-length data
+                BloscShuffleMode::NoShuffle,
+                None
+            ).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?
+        );
+
+        let bbox_array = ArrayBuilder::new(
+            array_shape.clone(),
+            chunk_shape.clone(),
+            DataType::Bytes,
+            FillValue::from(vec![])
+        )
+        .bytes_to_bytes_codecs(vec![bbox_blosc_codec])
+        .build(store.clone(), "/meta/bbox")?;
+
+        rt.block_on(bbox_array.async_store_metadata())?;
+
+        rt.block_on(bbox_array.async_store_array_subset_elements(
+            &ArraySubset::new_with_shape(array_shape.clone()),
+            &bbox_data,
+        ))?;
+    }
  
     rt.block_on(async {
         store
@@ -127,10 +163,11 @@ fn generate_icechunk_store(
 
 pub fn generate_icechunk_store_local(
     rt: &Runtime,
+    arrays: ArraysToGenerate,
 ) -> Result<(Session, TempDir), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
     let storage = rt.block_on(ObjectStorage::new_local_filesystem(temp_dir.path()))?;
-    let session = generate_icechunk_store(rt, Arc::new(storage))?;
+    let session = generate_icechunk_store(rt, Arc::new(storage), arrays)?;
     Ok((session, temp_dir))
 }
 
