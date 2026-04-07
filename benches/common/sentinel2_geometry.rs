@@ -1,4 +1,4 @@
-// s2_geometry.rs
+// sentinel2_geometry.rs
 //
 // Generates WKB geometries distributed across Sentinel-2 orbital footprints,
 // derived from first-principles orbital mechanics.
@@ -52,13 +52,13 @@ fn ground_track(t_s: f64, raan_deg: f64) -> (f64, f64) {
 // Tile table  (built once, sampled repeatedly)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Build the S2 tile `Rect` table.
+/// Build the tile `Rect` table.
 ///
 /// Two orbital days (S2A + S2B) produces ~21 000 tiles with global coverage
 /// up to ±81.4°. The ground-track pattern repeats with a 10-day exact repeat
 /// cycle, so 2 days is sufficient to represent the full spatial distribution
 /// for benchmarking.
-pub fn build_s2_tile_table() -> Vec<Rect> {
+pub fn build_tile_table() -> Vec<Rect> {
     let n_orbits = ((86400.0 * 2.0) / T_ORBIT_S).ceil() as usize + 1;
     let mut tiles = Vec::with_capacity(n_orbits * 2 * 400);
 
@@ -96,8 +96,8 @@ pub fn build_s2_tile_table() -> Vec<Rect> {
 /// Generate `n` WKB Polygon geometries, one per orbital tile, sampled
 /// randomly from the tile table. Each polygon is the tile's rectangular
 /// footprint encoded as a closed 5-point ring.
-pub fn generate_s2_wkb_polygons(n: usize) -> Vec<Vec<u8>> {
-    let tiles = build_s2_tile_table();
+pub fn generate_wkb_polygons(n: usize) -> Vec<Vec<u8>> {
+    let tiles = build_tile_table();
     let n_tiles = tiles.len();
     assert!(n_tiles > 0);
 

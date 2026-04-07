@@ -20,8 +20,8 @@ use zarrs::array_subset::ArraySubset;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_icechunk::AsyncIcechunkStore;
 
-mod s2_geometry;
-use s2_geometry::generate_s2_wkb_polygons;
+mod sentinel2_geometry;
+use sentinel2_geometry::generate_wkb_polygons;
 
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
@@ -120,7 +120,7 @@ fn generate_icechunk_store(
     }
 
     if matches!(arrays, ArraysToGenerate::BboxOnly | ArraysToGenerate::Both) {
-        let bbox_data = generate_s2_wkb_polygons(array_shape[0] as usize);
+        let bbox_data = generate_wkb_polygons(array_shape[0] as usize);
 
         let bbox_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
             BloscCodec::new(
