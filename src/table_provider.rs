@@ -31,6 +31,7 @@ use object_store::local::LocalFileSystem;
 use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Debug};
+use std::ops::Range;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 use tokio::sync::Semaphore;
@@ -336,7 +337,7 @@ async fn scan_chunks_async(
         .map(|a| a.chunk_grid_shape())
         .ok_or(ZarrDataFusionError::Custom("No arrays to scan".into()))?;
 
-    let ranges: Vec<std::ops::Range<u64>> = chunk_grid_shape.iter().map(|&n| 0..n).collect();
+    let ranges: Vec<Range<u64>> = chunk_grid_shape.iter().map(|&n| 0..n).collect();
 
     // Wrap arrays in Arc so they can be shared across spawned tasks.
     let arrays = Arc::new(arrays);
