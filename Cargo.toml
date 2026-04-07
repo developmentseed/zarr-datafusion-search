@@ -36,6 +36,16 @@ tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }
 wkb = "0.9"
 
 [[bench]]
-name = "datetime_filter"
+name = "datetime_local"
+harness = false
+test = false
+
+[[bench]]
+name = "datetime_s3"
+harness = false
+test = false
+
+[[bench]]
+name = "bbox_local"
 harness = false
 test = false
