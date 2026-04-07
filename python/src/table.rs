@@ -7,7 +7,7 @@ use datafusion_ffi::table_provider::FFI_TableProvider;
 use pyo3::prelude::*;
 use pyo3::pybacked::PyBackedStr;
 use pyo3::types::{PyCapsule, PyType};
-use pyo3_async_runtimes::tokio::{future_into_py, get_runtime};
+use pyo3_async_runtimes::tokio::future_into_py;
 use pyo3_object_store::AnyObjectStore;
 use zarr_datafusion_search::table_provider::ZarrTableProvider;
 
@@ -20,21 +20,6 @@ pub struct PyZarrTable {
 
 #[pymethods]
 impl PyZarrTable {
-    #[new]
-    pub fn new(zarr_path: String, group_path: PyBackedStr) -> PyResult<Self> {
-        let table_provider =
-            ZarrTableProvider::new_filesystem(zarr_path, &group_path).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                    "Failed to create ZarrTableProvider: {}",
-                    e
-                ))
-            })?;
-        Ok(PyZarrTable {
-            provider: Arc::new(table_provider),
-            _ctx: Arc::new(SessionContext::new()),
-        })
-    }
-
     #[classmethod]
     pub(crate) fn from_icechunk<'py>(
         _cls: &Bound<'py, PyType>,
@@ -51,16 +36,10 @@ impl PyZarrTable {
         dbg!("Created icechunk session from msgpack serialization");
         dbg!(icechunk_session.config());
 
-        let runtime = get_runtime();
-
         future_into_py(py, async move {
-            let table_provider = ZarrTableProvider::new_icechunk(
-                icechunk_session,
-                runtime.handle().clone(),
-                group_path,
-            )
-            .await
-            .unwrap();
+            let table_provider = ZarrTableProvider::new_icechunk(icechunk_session, &group_path)
+                .await
+                .unwrap();
 
             Ok(Self {
                 provider: Arc::new(table_provider),

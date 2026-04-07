@@ -26,6 +26,9 @@ pub enum ZarrDataFusionError {
     #[error("Object store error: {0}")]
     ObjectStore(#[from] object_store::Error),
 
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
     #[error("{0}")]
     Custom(String),
 }
