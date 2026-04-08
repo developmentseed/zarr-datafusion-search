@@ -6,16 +6,16 @@ This concept was conceived by the team at [Earthmover](https://www.earthmover.io
 
 ## Schema
 
-To store this _metadata_, this project uses a convention where the Zarr store represents each metadata "field" with a 1-dimensional array in a root group named `"meta"`.
+To store this _metadata_, zarr-datafusion-search uses a convention where the Zarr store represents each metadata "field" with a 1-dimensional array in a root group named `"meta"`.
 
-Users can define arbitrary schemas where the 1-dimensional arrays each use a `dtype` that has an equivalent Arrow type in our supported [mappings](https://github.com/developmentseed/zarr-datafusion-search/issues/12).  A concrete example would look like
+Users can define arbitrary schemas where the 1-dimensional arrays each use a `dtype` that has an equivalent Arrow type in our supported [mappings](https://github.com/developmentseed/zarr-datafusion-search/issues/12).  A concrete example might look like
 
 - Inside a Zarr group named `"meta"`
     - A `datetime64[ms]` array named `"date"` with `n` timestamps named `"date"` with `n` timestamps.
     - A `VariableLengthUTF8` array named `"collection"` with `n` string values.
     - A `VariableLengthBytes` array named `"bbox"` with `n` binary values, where each value is a WKB-encoded Polygon (or MultiPolygon) with the bounding box of that Zarr record.
 
-This data schema may change over time.
+This project is under active development so these conventions may change.
 
 ## Python API
 
