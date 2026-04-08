@@ -21,7 +21,7 @@ use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs_icechunk::AsyncIcechunkStore;
 
 mod sentinel2_geometry;
-use sentinel2_geometry::generate_wkb_polygons;
+use sentinel2_geometry::{generate_bbox_columns, generate_wkb_polygons};
 
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
@@ -32,9 +32,10 @@ const CHUNK_SIZE: u64 = 1_000_000; // 1M elements per chunk
 
 #[derive(Debug, Clone, Copy)]
 pub enum ArraysToGenerate {
-    DatetimeOnly,
-    BboxOnly,
-    Both,
+    Datetime,
+    Bbox,
+    BboxColumns,
+    All,
 }
 
 // This generates:
@@ -84,10 +85,7 @@ fn generate_icechunk_store(
     let array_shape = vec![date_data.len() as u64];
     let chunk_shape = vec![CHUNK_SIZE];
 
-    if matches!(
-        arrays,
-        ArraysToGenerate::DatetimeOnly | ArraysToGenerate::Both
-    ) {
+    if matches!(arrays, ArraysToGenerate::Datetime | ArraysToGenerate::All) {
         let date_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
             BloscCodec::new(
                 BloscCompressor::Zstd,
@@ -119,7 +117,7 @@ fn generate_icechunk_store(
         ))?;
     }
 
-    if matches!(arrays, ArraysToGenerate::BboxOnly | ArraysToGenerate::Both) {
+    if matches!(arrays, ArraysToGenerate::Bbox) {
         let bbox_data = generate_wkb_polygons(array_shape[0] as usize);
 
         let bbox_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
@@ -150,6 +148,88 @@ fn generate_icechunk_store(
         ))?;
     }
 
+    if matches!(
+        arrays,
+        ArraysToGenerate::BboxColumns | ArraysToGenerate::All
+    ) {
+        let (xmin, xmax, ymin, ymax) = generate_bbox_columns(array_shape[0] as usize);
+
+        let f64_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
+            BloscCodec::new(
+                BloscCompressor::Zstd,
+                BloscCompressionLevel::try_from(9).unwrap(),
+                None,
+                BloscShuffleMode::NoShuffle,
+                None,
+            )
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?,
+        );
+
+        // Create and store xmin array
+        let xmin_array = ArrayBuilder::new(
+            array_shape.clone(),
+            chunk_shape.clone(),
+            DataType::Float64,
+            FillValue::from(0.0f64),
+        )
+        .bytes_to_bytes_codecs(vec![f64_blosc_codec.clone()])
+        .build(store.clone(), "/meta/xmin")?;
+
+        rt.block_on(xmin_array.async_store_metadata())?;
+        rt.block_on(xmin_array.async_store_array_subset_elements(
+            &ArraySubset::new_with_shape(array_shape.clone()),
+            &xmin,
+        ))?;
+
+        // Create and store xmax array
+        let xmax_array = ArrayBuilder::new(
+            array_shape.clone(),
+            chunk_shape.clone(),
+            DataType::Float64,
+            FillValue::from(0.0f64),
+        )
+        .bytes_to_bytes_codecs(vec![f64_blosc_codec.clone()])
+        .build(store.clone(), "/meta/xmax")?;
+
+        rt.block_on(xmax_array.async_store_metadata())?;
+        rt.block_on(xmax_array.async_store_array_subset_elements(
+            &ArraySubset::new_with_shape(array_shape.clone()),
+            &xmax,
+        ))?;
+
+        // Create and store ymin array
+        let ymin_array = ArrayBuilder::new(
+            array_shape.clone(),
+            chunk_shape.clone(),
+            DataType::Float64,
+            FillValue::from(0.0f64),
+        )
+        .bytes_to_bytes_codecs(vec![f64_blosc_codec.clone()])
+        .build(store.clone(), "/meta/ymin")?;
+
+        rt.block_on(ymin_array.async_store_metadata())?;
+        rt.block_on(ymin_array.async_store_array_subset_elements(
+            &ArraySubset::new_with_shape(array_shape.clone()),
+            &ymin,
+        ))?;
+
+        // Create and store ymax array
+        let ymax_array = ArrayBuilder::new(
+            array_shape.clone(),
+            chunk_shape.clone(),
+            DataType::Float64,
+            FillValue::from(0.0f64),
+        )
+        .bytes_to_bytes_codecs(vec![f64_blosc_codec])
+        .build(store.clone(), "/meta/ymax")?;
+
+        rt.block_on(ymax_array.async_store_metadata())?;
+        rt.block_on(ymax_array.async_store_array_subset_elements(
+            &ArraySubset::new_with_shape(array_shape.clone()),
+            &ymax,
+        ))?;
+    }
+
     rt.block_on(async {
         store
             .session()
@@ -176,6 +256,21 @@ pub fn generate_icechunk_store_local(
     Ok((session, temp_dir))
 }
 
+pub fn generate_icechunk_store_s3(
+    rt: &Runtime,
+    bucket: String,
+    prefix: String,
+) -> Result<Session, Box<dyn std::error::Error>> {
+    let storage = rt.block_on(ObjectStorage::new_s3(
+        bucket,
+        Some(prefix),
+        None, // credentials - uses default AWS credential chain
+        None, // config - uses default S3 options
+    ))?;
+    let session = generate_icechunk_store(rt, Arc::new(storage), ArraysToGenerate::All)?;
+    Ok(session)
+}
+
 pub fn run_bench(
     c: &mut Criterion,
     rt: &Runtime,
@@ -194,7 +289,10 @@ pub fn run_bench(
     group.bench_function(bench_name, |b| {
         b.to_async(rt).iter(|| async {
             let df = ctx.sql(black_box(sql)).await.unwrap();
-            df.collect().await.unwrap()
+            let batches = df.collect().await.unwrap();
+            // let row_count: usize = batches.iter().map(|batch| batch.num_rows()).sum();
+            // println!("Query returned {} rows", row_count);
+            batches
         });
     });
 
@@ -218,11 +316,16 @@ pub fn run_memory_profile(rt: &Runtime, ctx: &SessionContext, sql: &str) {
 
 pub static DATETIME_SQL: &str = "\
     SELECT date FROM zarr_data WHERE \
-    date < CAST('2025-10-11' AS DATE) \
-    and date > CAST('2025-09-01' AS DATE)\
+    date < CAST('2025-01-01' AS DATE) \
+    and date > CAST('2024-12-25' AS DATE)\
 ";
 
 pub static BBOX_SQL: &str = "\
     SELECT bbox FROM zarr_data \
     WHERE ST_Intersects(bbox, ST_GeomFromText('POLYGON((0 -7, 0 7, 5 7, 5 -7, 0 -7))')) \
+";
+
+pub static BBOX_COLUMNS_SQL: &str = "\
+    SELECT xmin, xmax, ymin, ymax FROM zarr_data \
+    WHERE xmin <= 5 AND xmax >= 0 AND ymin <= 7 AND ymax >= -7 \
 ";
