@@ -1,14 +1,19 @@
 # Contributing
 
-## Create example Zarr files
-
-From the root directory, run:
+## Rust
+From the project root, run:
 
 ```bash
-uv run python scripts/generate_data.py
+cargo test
 ```
 
-This will generate `data/zarr_store.zarr` from the root directory.
+A suite of benchmarks are available (though the remote S3 benchmarks use data in a protected bucket and requires credentials). Benchmarks are in separate binaries and can be run via
+
+```bash
+cargo datetime_local
+cargo bbox_colunms_local
+cargo bbox_local
+```
 
 ## Python bindings
 
@@ -23,5 +28,5 @@ The `--no-project` is necessary to avoid building the Rust code (in release mode
 You need to add `--no-project` before any `uv run` command. For example, to run IPython:
 
 ```bash
-uv run --no-project ipython
+uv run pytest
 ```

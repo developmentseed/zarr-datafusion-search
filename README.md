@@ -1,10 +1,12 @@
 # zarr-datafusion-search
 
-This is a prototype for being able to query _metadata_ about Zarr arrays using [DataFusion](https://datafusion.apache.org/), an extensible query engine written in Rust.
+This is a prototype for querying STAC or CMR style _metadata_ about Zarr arrays and groups using [DataFusion](https://datafusion.apache.org/), an extensible query engine written in Rust.
 
-## Zarr Schema
+This concept was conceived by the team at [Earthmover](https://www.earthmover.io/) and is outlined in their whitepaper [Level 2 Data Collections in Zarr / Icechunk](https://docs.google.com/document/d/1tbT-B_yDGO74Tz_LstTSLJ6mw14uaswzl6v_tOyNzJg/edit?pli=1&tab=t.0#heading=h.awu8gjpaww08).
 
-In particular, we assume there is a Zarr store with multiple 1-dimensional arrays in root group named `"meta"`.
+## Schema
+
+To store this _metadata_, this project uses a convention where the Zarr store represents each metadata "field" with a 1-dimensional array in a root group named `"meta"`.
 
 Users can define arbitrary schemas where the 1-dimensional arrays each use a `dtype` that has an equivalent Arrow type in our supported [mappings](https://github.com/developmentseed/zarr-datafusion-search/issues/12).  A concrete example would look like
 
