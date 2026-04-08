@@ -10,9 +10,9 @@ cargo test
 A suite of benchmarks are available (though the remote S3 benchmarks use data in a protected bucket and requires credentials). Benchmarks are in separate binaries and can be run via
 
 ```bash
-cargo datetime_local
-cargo bbox_colunms_local
-cargo bbox_local
+cargo bench --bench datetime_local
+cargo bench --bench bbox_colunms_local
+cargo bench --bench bbox_local
 ```
 
 ## Python bindings
