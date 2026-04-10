@@ -29,6 +29,7 @@ chrono = "0.4.44"
 criterion = { version = "0.5.1", features = ["async_tokio"] }
 dhat = "0.3"
 geo = "0.31"
+geo-index = "0.2"
 geoarrow-array = "0.7.0"
 rand = "0.8"
 tempfile = "3"

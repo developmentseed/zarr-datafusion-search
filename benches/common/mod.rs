@@ -35,6 +35,7 @@ pub enum ArraysToGenerate {
     Datetime,
     Bbox,
     BboxColumns,
+    RtreeIndex,
     All,
 }
 
@@ -228,7 +229,82 @@ fn generate_icechunk_store(
             &ArraySubset::new_with_shape(array_shape.clone()),
             &ymax,
         ))?;
+
     }
+    if matches!(
+        arrays,
+        ArraysToGenerate::RtreeIndex | ArraysToGenerate::All
+    ) {
+        let index_group = zarrs::group::GroupBuilder::new().build(store.clone(), "/indexes")?;
+        rt.block_on(index_group.async_store_metadata())?;
+
+        let (xmin, xmax, ymin, ymax) = generate_bbox_columns(array_shape[0] as usize);
+        let start = std::time::Instant::now();
+
+        use geo_index::rtree::{RTreeBuilder, sort::HilbertSort};
+
+        // Use f32 instead of f64 to reduce index size by ~50%
+        let mut rtree_builder = RTreeBuilder::<f32>::new(xmin.len() as u32);
+        for i in 0..xmin.len() {
+            rtree_builder.add(xmin[i] as f32, ymin[i] as f32, xmax[i] as f32, ymax[i] as f32);
+        }
+        let rtree = rtree_builder.finish::<HilbertSort>();
+        let rtree_bytes = rtree.into_inner();
+
+        println!(
+            "Built R-tree index in {:?} - {} items, {} bytes ({:.2} MB)",
+            start.elapsed(),
+            xmin.len(),
+            rtree_bytes.len(),
+            rtree_bytes.len() as f64 / 1_048_576.0
+        );
+
+        // Store the R-tree as a special array with compression
+        let rtree_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
+            BloscCodec::new(
+                BloscCompressor::Zstd,
+                BloscCompressionLevel::try_from(9).unwrap(),
+                None,
+                BloscShuffleMode::NoShuffle,
+                None,
+            )
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?,
+        );
+
+        let rtree_array = ArrayBuilder::new(
+            vec![rtree_bytes.len() as u64],
+            vec![rtree_bytes.len() as u64], // Single chunk
+            DataType::UInt8,
+            FillValue::from(0u8),
+        )
+        .bytes_to_bytes_codecs(vec![rtree_blosc_codec])
+        .build(store.clone(), "/indexes/bbox")?;
+
+        rt.block_on(rtree_array.async_store_metadata())?;
+        rt.block_on(rtree_array.async_store_array_subset_elements(
+            &ArraySubset::new_with_shape(vec![rtree_bytes.len() as u64]),
+            rtree_bytes.as_slice(),
+        ))?;
+
+        // Read back the compressed chunk to show actual storage size
+        use zarrs::storage::AsyncReadableStorageTraits;
+        let chunk_key = rtree_array.chunk_key(&[0]);
+        let compressed_chunk = rt.block_on(async {
+            store.get(&chunk_key).await
+        })?;
+        if let Some(chunk_bytes) = compressed_chunk {
+            let compression_ratio = rtree_bytes.len() as f64 / chunk_bytes.len() as f64;
+            println!(
+                "R-tree index stored in Zarr at /indexes/bbox - uncompressed: {:.2} MB, compressed: {:.2} MB (ratio: {:.2}x)",
+                rtree_bytes.len() as f64 / 1_048_576.0,
+                chunk_bytes.len() as f64 / 1_048_576.0,
+                compression_ratio
+            );
+        } else {
+            println!("R-tree index stored in Zarr at /indexes/bbox");
+        }
+    }
+
 
     rt.block_on(async {
         store
