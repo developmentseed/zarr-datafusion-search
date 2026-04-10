@@ -115,3 +115,33 @@ pub fn generate_wkb_polygons(n: usize) -> Vec<Vec<u8>> {
 
     out
 }
+
+/// Generate `n` sets of bounding box coordinates (xmin, xmax, ymin, ymax)
+/// from randomly sampled orbital tiles.
+///
+/// Returns a tuple of four vectors:
+/// - xmin: minimum longitude values
+/// - xmax: maximum longitude values
+/// - ymin: minimum latitude values
+/// - ymax: maximum latitude values
+pub fn generate_bbox_columns(n: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+    let tiles = build_tile_table();
+    let n_tiles = tiles.len();
+    assert!(n_tiles > 0);
+
+    let mut rng = rand::thread_rng();
+    let mut xmin = Vec::with_capacity(n);
+    let mut xmax = Vec::with_capacity(n);
+    let mut ymin = Vec::with_capacity(n);
+    let mut ymax = Vec::with_capacity(n);
+
+    for _ in 0..n {
+        let tile = &tiles[rng.gen_range(0..n_tiles)];
+        xmin.push(tile.min().x);
+        xmax.push(tile.max().x);
+        ymin.push(tile.min().y);
+        ymax.push(tile.max().y);
+    }
+
+    (xmin, xmax, ymin, ymax)
+}
