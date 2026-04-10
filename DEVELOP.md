@@ -25,8 +25,8 @@ uv run --no-project maturin develop --uv
 
 The `--no-project` is necessary to avoid building the Rust code (in release mode) an extra time before we even reach the `maturin develop` command.
 
-You need to add `--no-project` before any `uv run` command. For example, to run IPython:
+You need to add `--no-project` before any `uv run` command. For example
 
 ```bash
-uv run pytest
+uv run --no-project pytest
 ```
