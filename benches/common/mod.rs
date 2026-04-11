@@ -61,7 +61,7 @@ fn generate_icechunk_store(
     let meta_group = zarrs::group::GroupBuilder::new().build(store.clone(), "/meta")?;
     rt.block_on(meta_group.async_store_metadata())?;
 
-    let start_date = NaiveDate::from_ymd_opt(2010, 1, 1).unwrap();
+    let start_date = NaiveDate::from_ymd_opt(2024, 12, 1).unwrap();
     let end_date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
     let num_days = (end_date - start_date).num_days() as usize;
 

@@ -681,14 +681,8 @@ async fn scan_chunks_async(
     );
 
     // If spatial index was used, remove that filter from evaluation (skip WKB decode!)
-    let (filters_to_evaluate, filter_col_names_to_load, spatially_indexed_columns) = if let Some((_, handled_filter_idx)) = &spatial_index_result {
+    let (filters_to_evaluate, filter_col_names_to_load) = if let Some((_, handled_filter_idx)) = &spatial_index_result {
         let mut remaining_filters = Vec::new();
-        let mut indexed_cols = HashSet::new();
-
-        // Identify which columns are handled by spatial index
-        if let Some(filter) = filters.get(*handled_filter_idx) {
-            collect_columns_from_expr(filter, &mut indexed_cols);
-        }
 
         for (idx, filter) in filters.iter().enumerate() {
             if idx != *handled_filter_idx {
@@ -702,9 +696,9 @@ async fn scan_chunks_async(
             collect_columns_from_expr(filter, &mut remaining_cols);
         }
 
-        (remaining_filters, remaining_cols, indexed_cols)
+        (remaining_filters, remaining_cols)
     } else {
-        (filters.clone(), filter_col_names.clone(), HashSet::new())
+        (filters.clone(), filter_col_names.clone())
     };
 
     // Determine which chunks to scan and optionally which rows within each chunk
@@ -727,7 +721,6 @@ async fn scan_chunks_async(
     let projected_schema = Arc::new(projected_schema);
     let filters = Arc::new(filters_to_evaluate);
     let filter_col_names = Arc::new(filter_col_names_to_load);
-    let spatially_indexed_columns = Arc::new(spatially_indexed_columns);
 
     let semaphore = Arc::new(Semaphore::new(16)); // max 16 chunks in flight
 
@@ -739,7 +732,6 @@ async fn scan_chunks_async(
             let projected_schema = projected_schema.clone();
             let filters = filters.clone();
             let filter_col_names = filter_col_names.clone();
-            let spatially_indexed_columns = spatially_indexed_columns.clone();
             let semaphore = semaphore.clone();
 
             tokio::task::spawn(async move {
@@ -756,7 +748,6 @@ async fn scan_chunks_async(
                         &projected_schema,
                         &filters,
                         &filter_col_names,
-                        &spatially_indexed_columns,
                         &chunk_indices,
                         &rows,
                     )
@@ -769,7 +760,6 @@ async fn scan_chunks_async(
                         &projected_schema,
                         &filters,
                         &filter_col_names,
-                        &spatially_indexed_columns,
                         &chunk_indices,
                     )
                     .await
@@ -806,7 +796,6 @@ async fn process_chunk_with_row_filter_async(
     projected_schema: &SchemaRef,
     filters: &[Expr],
     filter_col_names: &HashSet<String>,
-    spatially_indexed_columns: &HashSet<String>,
     chunk_indices: &[u64],
     row_indices: &[u64],
 ) -> ZarrDataFusionResult<Option<RecordBatch>> {
@@ -853,17 +842,11 @@ async fn process_chunk_with_row_filter_async(
         mask
     };
 
-    // Load projection columns and apply mask (skip spatially indexed columns)
+    // Load projection columns and apply mask
     let mut output_arrays: Vec<ArrayRef> = Vec::new();
-    let mut actual_fields: Vec<Field> = Vec::new();
 
     for field in projected_schema.fields() {
         let col_name = field.name();
-
-        // Skip columns that were handled by spatial index
-        if spatially_indexed_columns.contains(col_name) {
-            continue;
-        }
 
         let candidate_array = if let Some((_, arr)) = filter_arrays.iter().find(|(n, _)| n == col_name) {
             // Reuse if already loaded for filtering
@@ -887,14 +870,10 @@ async fn process_chunk_with_row_filter_async(
         let filtered = arrow::compute::filter(candidate_array.as_ref(), &bool_mask)?;
 
         output_arrays.push(filtered);
-        actual_fields.push(field.as_ref().clone());
     }
 
-    // Build schema with only the columns we actually loaded
-    let actual_schema = Arc::new(Schema::new(actual_fields));
-
     Ok(Some(RecordBatch::try_new(
-        actual_schema,
+        projected_schema.clone(),
         output_arrays,
     )?))
 }
@@ -905,22 +884,14 @@ async fn process_chunk_async(
     projected_schema: &SchemaRef,
     filters: &[Expr],
     filter_col_names: &HashSet<String>,
-    spatially_indexed_columns: &HashSet<String>,
     chunk_indices: &[u64],
 ) -> ZarrDataFusionResult<Option<RecordBatch>> {
-    // If there are no filters, load projected columns directly (skip spatially indexed ones)
+    // If there are no filters, load projected columns directly
     if filters.is_empty() {
         let mut output_arrays: Vec<ArrayRef> = Vec::new();
-        let mut actual_fields: Vec<Field> = Vec::new();
 
         for field in projected_schema.fields() {
             let col_name = field.name();
-
-            // Skip columns that were handled by spatial index
-            if spatially_indexed_columns.contains(col_name) {
-                eprintln!("Skipping spatially indexed column '{}' from projection", col_name);
-                continue;
-            }
 
             let zarr_array = arrays.get(col_name).ok_or_else(|| {
                 ZarrDataFusionError::Custom(format!(
@@ -930,11 +901,9 @@ async fn process_chunk_async(
             let table_field = table_schema.field_with_name(col_name)?;
             output_arrays
                 .push(retrieve_chunk_as_arrow_async(zarr_array, table_field, chunk_indices).await?);
-            actual_fields.push(field.as_ref().clone());
         }
 
-        let actual_schema = Arc::new(Schema::new(actual_fields));
-        let batch = RecordBatch::try_new(actual_schema, output_arrays)?;
+        let batch = RecordBatch::try_new(projected_schema.clone(), output_arrays)?;
         return Ok(Some(batch));
     }
 
@@ -958,17 +927,11 @@ async fn process_chunk_async(
         return Ok(None);
     }
 
-    // Load projection columns (reusing filter data where it overlaps), apply mask (skip spatially indexed columns)
+    // Load projection columns (reusing filter data where it overlaps), apply mask
     let mut output_arrays: Vec<ArrayRef> = Vec::new();
-    let mut actual_fields: Vec<Field> = Vec::new();
 
     for field in projected_schema.fields() {
         let col_name = field.name();
-
-        // Skip columns that were handled by spatial index
-        if spatially_indexed_columns.contains(col_name) {
-            continue;
-        }
 
         let full_array = if let Some((_, arr)) = filter_arrays.iter().find(|(n, _)| n == col_name) {
             arr.clone()
@@ -983,13 +946,10 @@ async fn process_chunk_async(
         };
         let filtered = arrow::compute::filter(full_array.as_ref(), &bool_mask)?;
         output_arrays.push(filtered);
-        actual_fields.push(field.as_ref().clone());
     }
 
-    let actual_schema = Arc::new(Schema::new(actual_fields));
-
     Ok(Some(RecordBatch::try_new(
-        actual_schema,
+        projected_schema.clone(),
         output_arrays,
     )?))
 }
@@ -1336,5 +1296,38 @@ mod tests {
             .collect();
         assert!(collections.contains(&"collection_a"));
         assert!(collections.contains(&"collection_b"));
+    }
+
+    #[tokio::test]
+    async fn test_st_intersects_with_bbox_in_projection() {
+        use arrow_array::Array;
+        let wrapper = get_local_zarr_store().await;
+        let path = wrapper.get_store_path();
+        let ctx = SessionContext::new();
+        register_spatial_functions(&ctx).expect("Failed to register spatial functions");
+        let local_fs = LocalFileSystem::new_with_prefix(path).unwrap();
+        let provider = ZarrTableProvider::new_object_store(local_fs, "/meta")
+            .await
+            .unwrap();
+        ctx.register_table("zarr_data", Arc::new(provider))
+            .expect("Failed to register table");
+        // Select bbox in the projection along with the filter
+        let sql = "
+            SELECT bbox, collection FROM zarr_data
+            WHERE ST_Intersects(bbox, ST_GeomFromText('POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))'))
+            ORDER BY collection
+        ";
+        let batches = ctx.sql(sql).await.unwrap().collect().await.unwrap();
+        assert!(!batches.is_empty());
+        assert!(batches[0].num_rows() > 0);
+
+        // Verify we have both bbox and collection columns
+        assert_eq!(batches[0].num_columns(), 2);
+        assert!(batches[0].column_by_name("bbox").is_some());
+        assert!(batches[0].column_by_name("collection").is_some());
+
+        // Verify bbox column has data
+        let bbox_col = batches[0].column_by_name("bbox").unwrap();
+        assert_eq!(bbox_col.len(), batches[0].num_rows());
     }
 }
