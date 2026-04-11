@@ -16,11 +16,9 @@
 // Dependencies:
 //   geo  = "0.28"
 //   wkb  = "0.9"
-//   rand = "0.8"
 #![allow(dead_code)]
 
 use geo::{Polygon, Rect, coord};
-use rand::Rng;
 use wkb::writer::{WriteOptions, write_polygon};
 
 // ── Orbital constants ─────────────────────────────────────────────────────────
@@ -94,7 +92,7 @@ pub fn build_tile_table() -> Vec<Rect> {
 }
 
 /// Generate `n` WKB Polygon geometries, one per orbital tile, sampled
-/// randomly from the tile table. Each polygon is the tile's rectangular
+/// periodically from the tile table. Each polygon is the tile's rectangular
 /// footprint encoded as a closed 5-point ring.
 pub fn generate_wkb_polygons(n: usize) -> Vec<Vec<u8>> {
     let tiles = build_tile_table();
@@ -102,11 +100,11 @@ pub fn generate_wkb_polygons(n: usize) -> Vec<Vec<u8>> {
     assert!(n_tiles > 0);
 
     let opts = WriteOptions::default();
-    let mut rng = rand::thread_rng();
     let mut out = Vec::with_capacity(n);
 
-    for _ in 0..n {
-        let tile = &tiles[rng.gen_range(0..n_tiles)];
+    for i in 0..n {
+        // Sample periodically from the tile table
+        let tile = &tiles[i % n_tiles];
         let polygon: Polygon = (*tile).into();
         let mut buf = Vec::new();
         write_polygon(&mut buf, &polygon, &opts).unwrap();
@@ -117,7 +115,7 @@ pub fn generate_wkb_polygons(n: usize) -> Vec<Vec<u8>> {
 }
 
 /// Generate `n` sets of bounding box coordinates (xmin, xmax, ymin, ymax)
-/// from randomly sampled orbital tiles.
+/// from periodically sampled orbital tiles.
 ///
 /// Returns a tuple of four vectors:
 /// - xmin: minimum longitude values
@@ -129,14 +127,14 @@ pub fn generate_bbox_columns(n: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64
     let n_tiles = tiles.len();
     assert!(n_tiles > 0);
 
-    let mut rng = rand::thread_rng();
     let mut xmin = Vec::with_capacity(n);
     let mut xmax = Vec::with_capacity(n);
     let mut ymin = Vec::with_capacity(n);
     let mut ymax = Vec::with_capacity(n);
 
-    for _ in 0..n {
-        let tile = &tiles[rng.gen_range(0..n_tiles)];
+    for i in 0..n {
+        // Sample periodically from the tile table
+        let tile = &tiles[i % n_tiles];
         xmin.push(tile.min().x);
         xmax.push(tile.max().x);
         ymin.push(tile.min().y);
