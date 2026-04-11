@@ -10,6 +10,7 @@ arrow-schema = "57.0.0"
 async-trait = "0.1.89"
 datafusion = "52.0"
 futures = "0.3.31"
+geo-index = "0.2"
 geodatafusion = "0.3"
 geoarrow-schema = "0.7.0"
 icechunk = "0.3.16"
@@ -58,5 +59,10 @@ test = false
 
 [[bench]]
 name = "bbox_columns_s3"
+harness = false
+test = false
+
+[[bench]]
+name = "rtree_index_local"
 harness = false
 test = false
