@@ -435,43 +435,68 @@ fn extract_st_intersects_bbox(expr: &Expr) -> Option<(String, (f32, f32, f32, f3
     use datafusion::scalar::ScalarValue;
 
     // Match ST_Intersects(column, geometry_literal)
-    if let Expr::ScalarFunction(ScalarFunction { func, args }) = expr {
-        if func.name() == "st_intersects" && args.len() == 2 {
-            // First arg should be column reference
-            if let Expr::Column(col) = &args[0] {
-                let array_name = col.name.clone();
+    let Expr::ScalarFunction(ScalarFunction { func, args }) = expr else {
+        return None;
+    };
 
-                // Second arg could be either:
-                // 1. ST_GeomFromText('POLYGON(...)')
-                // 2. Literal GeoArrow geometry (Union)
-                match &args[1] {
-                    // Case 1: ST_GeomFromText function call
-                    Expr::ScalarFunction(ScalarFunction {
-                        func: geom_func,
-                        args: geom_args,
-                    }) if geom_func.name() == "st_geomfromtext" && !geom_args.is_empty() => {
-                        if let Expr::Literal(ScalarValue::Utf8(Some(wkt)), _) = &geom_args[0] {
-                            if let Some(bbox) = parse_polygon_bbox(wkt) {
-                                return Some((array_name, bbox));
-                            }
-                        }
-                    }
-
-                    // Case 2: GeoArrow geometry literal (Union type)
-                    Expr::Literal(literal_value, _) => {
-                        // Try to extract bbox from the literal geometry
-                        if let Some(bbox) = extract_bbox_from_geoarrow_literal(literal_value) {
-                            return Some((array_name, bbox));
-                        }
-                    }
-
-                    _ => {}
-                }
-            }
-        }
+    if func.name() != "st_intersects" || args.len() != 2 {
+        return None;
     }
 
-    None
+    // First arg should be column reference
+    let Expr::Column(col) = &args[0] else {
+        return None;
+    };
+    let array_name = col.name.clone();
+
+    // Second arg could be either:
+    // 1. ST_GeomFromText('POLYGON(...)')
+    // 2. Literal GeoArrow geometry (Union)
+    match &args[1] {
+        // Case 1: ST_GeomFromText function call
+        Expr::ScalarFunction(ScalarFunction {
+            func: geom_func,
+            args: geom_args,
+        }) if geom_func.name() == "st_geomfromtext" && !geom_args.is_empty() => {
+            let Expr::Literal(ScalarValue::Utf8(Some(wkt)), _) = &geom_args[0] else {
+                return None;
+            };
+            parse_polygon_bbox(wkt).map(|bbox| (array_name, bbox))
+        }
+
+        // Case 2: GeoArrow geometry literal (Union type)
+        Expr::Literal(literal_value, _) => {
+            extract_bbox_from_geoarrow_literal(literal_value).map(|bbox| (array_name, bbox))
+        }
+
+        _ => None,
+    }
+}
+
+/// Extract bounding box from coordinate arrays
+fn compute_bbox_from_coords(
+    x_arr: &arrow::array::PrimitiveArray<arrow::datatypes::Float64Type>,
+    y_arr: &arrow::array::PrimitiveArray<arrow::datatypes::Float64Type>,
+) -> Option<(f32, f32, f32, f32)> {
+    let mut minx = f32::MAX;
+    let mut miny = f32::MAX;
+    let mut maxx = f32::MIN;
+    let mut maxy = f32::MIN;
+
+    for i in 0..x_arr.len() {
+        let x = x_arr.value(i) as f32;
+        let y = y_arr.value(i) as f32;
+        minx = minx.min(x);
+        maxx = maxx.max(x);
+        miny = miny.min(y);
+        maxy = maxy.max(y);
+    }
+
+    if minx != f32::MAX {
+        Some((minx, miny, maxx, maxy))
+    } else {
+        None
+    }
 }
 
 /// Extract bounding box from a GeoArrow geometry literal
@@ -481,54 +506,37 @@ fn extract_bbox_from_geoarrow_literal(value: &datafusion::scalar::ScalarValue) -
 
     // GeoArrow geometries are stored as Union scalars
     // Structure: Union -> List (rings) -> List (vertices) -> Struct {x, y}
-    match value {
-        ScalarValue::Union(fields_opt, _type_ids, _metadata) => {
-            if let Some((_field_id, scalar_val)) = fields_opt {
-                if let ScalarValue::List(list_arr) = scalar_val.as_ref() {
-                    if list_arr.len() > 0 {
-                        let rings_array = list_arr.value(0);
-                        if let Some(vertices_list) = rings_array.as_list_opt::<i32>() {
-                            if vertices_list.len() > 0 {
-                                let vertices = vertices_list.value(0);
-                                if let Some(struct_array) = vertices.as_struct_opt() {
-                                    if let (Some(x_col), Some(y_col)) = (
-                                        struct_array.column_by_name("x"),
-                                        struct_array.column_by_name("y")
-                                    ) {
-                                        if let (Some(x_arr), Some(y_arr)) = (
-                                            x_col.as_primitive_opt::<arrow::datatypes::Float64Type>(),
-                                            y_col.as_primitive_opt::<arrow::datatypes::Float64Type>()
-                                        ) {
-                                            let mut minx = f32::MAX;
-                                            let mut miny = f32::MAX;
-                                            let mut maxx = f32::MIN;
-                                            let mut maxy = f32::MIN;
+    let ScalarValue::Union(fields_opt, _type_ids, _metadata) = value else {
+        return None;
+    };
 
-                                            for i in 0..x_arr.len() {
-                                                let x = x_arr.value(i) as f32;
-                                                let y = y_arr.value(i) as f32;
-                                                minx = minx.min(x);
-                                                maxx = maxx.max(x);
-                                                miny = miny.min(y);
-                                                maxy = maxy.max(y);
-                                            }
+    let (_field_id, scalar_val) = fields_opt.as_ref()?;
 
-                                            if minx != f32::MAX {
-                                                return Some((minx, miny, maxx, maxy));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        _ => {}
+    let ScalarValue::List(list_arr) = scalar_val.as_ref() else {
+        return None;
+    };
+
+    if list_arr.is_empty() {
+        return None;
     }
 
-    None
+    let rings_array = list_arr.value(0);
+    let vertices_list = rings_array.as_list_opt::<i32>()?;
+
+    if vertices_list.is_empty() {
+        return None;
+    }
+
+    let vertices = vertices_list.value(0);
+    let struct_array = vertices.as_struct_opt()?;
+
+    let x_col = struct_array.column_by_name("x")?;
+    let y_col = struct_array.column_by_name("y")?;
+
+    let x_arr = x_col.as_primitive_opt::<arrow::datatypes::Float64Type>()?;
+    let y_arr = y_col.as_primitive_opt::<arrow::datatypes::Float64Type>()?;
+
+    compute_bbox_from_coords(x_arr, y_arr)
 }
 
 /// Parse bounding box from WKT POLYGON string
