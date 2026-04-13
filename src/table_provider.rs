@@ -123,7 +123,7 @@ impl ZarrTableProvider {
                 continue;
             }
             let index_path = format!("/indexes/{}", array_name);
-            match Self::load_rtree_index(store.clone(), &index_path).await {
+            match Self::load_index(store.clone(), &index_path).await {
                 Ok(index_bytes) => {
                     indexes.insert(array_name.to_string(), index_bytes);
                 }
@@ -136,8 +136,7 @@ impl ZarrTableProvider {
         indexes
     }
 
-    /// Load a single R-tree index from Zarr storage
-    async fn load_rtree_index(
+    async fn load_index(
         store: Arc<dyn AsyncReadableListableStorageTraits>,
         index_path: &str,
     ) -> ZarrDataFusionResult<Vec<u8>> {
@@ -149,36 +148,6 @@ impl ZarrTableProvider {
             ))
             .await?;
         Ok(rtree_bytes)
-    }
-
-    /// Query R-tree spatial index for bounding box intersection
-    ///
-    /// Returns row indices that potentially intersect the query box
-    ///
-    /// # Usage Example
-    /// ```ignore
-    /// // In supports_filters_pushdown() or during scan execution:
-    /// if let Some(indices) = self.spatial_prefilter("bbox", 0.0, -7.0, 5.0, 7.0) {
-    ///     // Only read rows at these indices instead of full table scan
-    ///     println!("Spatial index reduced search space to {} candidates", indices.len());
-    /// }
-    /// ```
-    #[allow(dead_code)] // Kept for potential future direct use
-    fn spatial_prefilter(
-        &self,
-        array_name: &str,
-        query_minx: f32,
-        query_miny: f32,
-        query_maxx: f32,
-        query_maxy: f32,
-    ) -> Option<Vec<u32>> {
-        use geo_index::rtree::RTreeRef;
-
-        self.rtree_indexes.get(array_name).and_then(|bytes| {
-            RTreeRef::<f32>::try_new(bytes)
-                .ok()
-                .map(|rtree| rtree.search(query_minx, query_miny, query_maxx, query_maxy))
-        })
     }
 }
 
@@ -305,8 +274,7 @@ struct ZarrExec {
     projected_schema: SchemaRef,
     filters: Vec<Expr>,
     group_path: String,
-    /// Spatial R-tree indexes for accelerating bbox queries
-    rtree_indexes: HashMap<String, Vec<u8>>,
+    indexes: HashMap<String, Vec<u8>>,
     properties: PlanProperties,
 }
 
@@ -317,7 +285,7 @@ impl ZarrExec {
         projected_schema: SchemaRef,
         filters: Vec<Expr>,
         group_path: String,
-        rtree_indexes: HashMap<String, Vec<u8>>,
+        indexes: HashMap<String, Vec<u8>>,
     ) -> Self {
         let properties = PlanProperties::new(
             EquivalenceProperties::new(projected_schema.clone()),
@@ -331,7 +299,7 @@ impl ZarrExec {
             projected_schema,
             filters,
             group_path,
-            rtree_indexes,
+            indexes,
             properties,
         }
     }
@@ -380,7 +348,7 @@ impl ExecutionPlan for ZarrExec {
         let filters = self.filters.clone();
         let filter_col_names = Self::filter_column_names(&filters);
         let group_path = self.group_path.clone();
-        let rtree_indexes = self.rtree_indexes.clone();
+        let indexes = self.indexes.clone();
 
         let (store, handle) = match &backend {
             ZarrBackend::Async(b) => (b.store.clone(), b.handle.clone()),
@@ -398,7 +366,7 @@ impl ExecutionPlan for ZarrExec {
                         projected_schema,
                         filters,
                         filter_col_names,
-                        rtree_indexes,
+                        indexes,
                     ))
                     .await
                     .map_err(|e| datafusion::error::DataFusionError::External(Box::new(e)))?
@@ -426,9 +394,9 @@ impl DisplayAs for ZarrExec {
 /// Returns (chunk_map, filter_index) where:
 /// - chunk_map: HashMap of chunk indices -> row indices within that chunk
 /// - filter_index: Index of the filter that was handled by the spatial index (to skip evaluation)
-fn extract_spatial_filter_and_query_index(
+fn st_intersects_query_index(
     filters: &[Expr],
-    rtree_indexes: &HashMap<String, Vec<u8>>,
+    indexes: &HashMap<String, Vec<u8>>,
     arrays: &HashMap<String, Array<Arc<dyn AsyncReadableListableStorageTraits>>>,
     chunk_grid_shape: &[u64],
 ) -> Option<(HashMap<Vec<u64>, Vec<u64>>, usize)> {
@@ -438,7 +406,7 @@ fn extract_spatial_filter_and_query_index(
     for (filter_idx, filter) in filters.iter().enumerate() {
         if let Some((array_name, bbox)) = extract_st_intersects_bbox(filter) {
             // Check if we have an R-tree index for this array
-            if let Some(index_bytes) = rtree_indexes.get(&array_name) {
+            if let Some(index_bytes) = indexes.get(&array_name) {
                 // Query the R-tree
                 if let Ok(rtree) = RTreeRef::<f32>::try_new(index_bytes) {
                     let (minx, miny, maxx, maxy) = bbox;
@@ -673,7 +641,7 @@ async fn scan_chunks_async(
         .ok_or(ZarrDataFusionError::Custom("No arrays to scan".into()))?;
 
     // Try to use spatial index to filter chunks
-    let spatial_index_result = extract_spatial_filter_and_query_index(
+    let spatial_index_result = st_intersects_query_index(
         &filters,
         &rtree_indexes,
         &arrays,
@@ -801,58 +769,67 @@ async fn process_chunk_with_row_filter_async(
 ) -> ZarrDataFusionResult<Option<RecordBatch>> {
     use arrow::array::UInt64Array;
     use arrow::compute::take;
+    use std::collections::HashMap as StdHashMap;
 
     if row_indices.is_empty() {
         return Ok(None);
     }
 
-    // Define filter_arrays outside so it's available later
-    let mut filter_arrays: Vec<(String, ArrayRef)> = Vec::new();
-
-    // If spatial index handled all filters, we trust the index and skip filter evaluation
-    let bool_mask = if filters.is_empty() {
-        // All rows from spatial index are matches - create all-true mask
-        arrow::array::BooleanArray::from(vec![true; row_indices.len()])
+    // Step 1: Determine final rows to extract and cache any pre-loaded filter columns
+    let (final_row_indices, already_loaded) = if filters.is_empty() {
+        // Spatial index handled all filters - use row_indices as-is
+        (row_indices.to_vec(), StdHashMap::new())
     } else {
+        // Need to evaluate additional filters on candidate rows
+        let indices_array = UInt64Array::from(row_indices.to_vec());
+        let mut filter_arrays = Vec::new();
+
         // Load filter columns and extract candidate rows
         for col_name in filter_col_names {
             let zarr_array = arrays.get(col_name).ok_or_else(|| {
                 ZarrDataFusionError::Custom(format!("No open array for filter column '{col_name}'"))
             })?;
             let field = table_schema.field_with_name(col_name)?;
-
-            // Retrieve full chunk
             let full_chunk_array = retrieve_chunk_as_arrow_async(zarr_array, field, chunk_indices).await?;
-
-            // Extract candidate rows using take()
-            let indices_array = UInt64Array::from(row_indices.to_vec());
             let candidate_array = take(full_chunk_array.as_ref(), &indices_array, None)?;
-
             filter_arrays.push((col_name.clone(), candidate_array));
         }
 
-        // Evaluate filters on candidate rows (R-tree gave bbox matches, now check actual geometry)
-        let mask = evaluate_filters(filters, &filter_arrays)?;
+        // Evaluate filters (e.g., precise geometry checks after bbox filtering)
+        let bool_mask = evaluate_filters(filters, &filter_arrays)?;
 
-        // Skip if no rows pass the actual filter
-        if mask.true_count() == 0 {
+        if bool_mask.true_count() == 0 {
             return Ok(None);
         }
 
-        mask
+        // Compute final row indices and filter the already-loaded columns
+        let final_indices: Vec<u64> = row_indices
+            .iter()
+            .zip(bool_mask.iter())
+            .filter_map(|(idx, pass)| if pass? { Some(*idx) } else { None })
+            .collect();
+
+        let mut already_loaded = StdHashMap::new();
+        for (name, arr) in filter_arrays {
+            let filtered = arrow::compute::filter(arr.as_ref(), &bool_mask)?;
+            already_loaded.insert(name, filtered);
+        }
+
+        (final_indices, already_loaded)
     };
 
-    // Load projection columns and apply mask
+    // Step 2: Load projection columns (reusing cached filter columns where available)
+    let final_indices_array = UInt64Array::from(final_row_indices);
     let mut output_arrays: Vec<ArrayRef> = Vec::new();
 
     for field in projected_schema.fields() {
         let col_name = field.name();
 
-        let candidate_array = if let Some((_, arr)) = filter_arrays.iter().find(|(n, _)| n == col_name) {
-            // Reuse if already loaded for filtering
+        let output_array = if let Some(arr) = already_loaded.get(col_name) {
+            // Already loaded and filtered
             arr.clone()
         } else {
-            // Load projected column
+            // Load and extract using final indices (single take operation)
             let zarr_array = arrays.get(col_name).ok_or_else(|| {
                 ZarrDataFusionError::Custom(format!(
                     "No open array for projected column '{col_name}'"
@@ -860,16 +837,10 @@ async fn process_chunk_with_row_filter_async(
             })?;
             let table_field = table_schema.field_with_name(col_name)?;
             let full_chunk_array = retrieve_chunk_as_arrow_async(zarr_array, table_field, chunk_indices).await?;
-
-            // Extract candidate rows
-            let indices_array = UInt64Array::from(row_indices.to_vec());
-            take(full_chunk_array.as_ref(), &indices_array, None)?
+            take(full_chunk_array.as_ref(), &final_indices_array, None)?
         };
 
-        // Apply the boolean mask to get final matching rows
-        let filtered = arrow::compute::filter(candidate_array.as_ref(), &bool_mask)?;
-
-        output_arrays.push(filtered);
+        output_arrays.push(output_array);
     }
 
     Ok(Some(RecordBatch::try_new(
