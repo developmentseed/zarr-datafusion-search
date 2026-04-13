@@ -10,7 +10,7 @@ use zarrs_icechunk::AsyncIcechunkStore;
 
 #[tokio::test]
 async fn test_load_group() {
-    let wrapper = get_local_zarr_store().await;
+    let wrapper = get_local_zarr_store(false).await;
     let path = wrapper.get_store_path();
 
     {
@@ -22,7 +22,7 @@ async fn test_load_group() {
 
 #[tokio::test]
 async fn test_load_group_icechunk() {
-    let wrapper = get_local_icechunk_store().await;
+    let wrapper = get_local_icechunk_store(false).await;
     let path = wrapper.get_store_path();
     let storage = icechunk::new_local_filesystem_storage(Path::new(&path))
         .await

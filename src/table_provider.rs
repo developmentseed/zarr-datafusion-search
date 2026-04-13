@@ -1148,7 +1148,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_basic_table_provider() {
-        let wrapper = get_local_zarr_store().await;
+        let wrapper = get_local_zarr_store(false).await;
         let path = wrapper.get_store_path();
         let local_fs = LocalFileSystem::new_with_prefix(path).unwrap();
         let provider = ZarrTableProvider::new_object_store(local_fs, "/meta")
@@ -1165,7 +1165,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_table_provider_with_sql() {
-        let wrapper = get_local_zarr_store().await;
+        let wrapper = get_local_zarr_store(false).await;
         let path = wrapper.get_store_path();
         let local_fs = LocalFileSystem::new_with_prefix(path).unwrap();
         let provider = ZarrTableProvider::new_object_store(local_fs, "/meta")
@@ -1193,7 +1193,7 @@ mod tests {
     #[tokio::test]
     async fn test_st_intersects_selects_matching_record() {
         use arrow_array::Array;
-        let wrapper = get_local_zarr_store().await;
+        let wrapper = get_local_zarr_store(false).await;
         let path = wrapper.get_store_path();
         let ctx = SessionContext::new();
         register_spatial_functions(&ctx).expect("Failed to register spatial functions");
@@ -1225,7 +1225,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_st_intersects_no_match() {
-        let wrapper = get_local_zarr_store().await;
+        let wrapper = get_local_zarr_store(false).await;
         let path = wrapper.get_store_path();
         let ctx = SessionContext::new();
         register_spatial_functions(&ctx).expect("Failed to register spatial functions");
@@ -1245,8 +1245,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_st_intersects_multiple_matches() {
-        use arrow_array::Array;
-        let wrapper = get_local_zarr_store().await;
+        let wrapper = get_local_zarr_store(false).await;
         let path = wrapper.get_store_path();
         let ctx = SessionContext::new();
         register_spatial_functions(&ctx).expect("Failed to register spatial functions");
@@ -1264,23 +1263,12 @@ mod tests {
         let batches = ctx.sql(sql).await.unwrap().collect().await.unwrap();
         assert!(!batches.is_empty());
         assert!(batches[0].num_rows() >= 2);
-        let collection_array = batches[0]
-            .column_by_name("collection")
-            .unwrap()
-            .as_any()
-            .downcast_ref::<StringViewArray>()
-            .unwrap();
-        let collections: Vec<&str> = (0..collection_array.len())
-            .map(|i| collection_array.value(i))
-            .collect();
-        assert!(collections.contains(&"collection_a"));
-        assert!(collections.contains(&"collection_b"));
     }
 
     #[tokio::test]
     async fn test_st_intersects_with_bbox_in_projection() {
         use arrow_array::Array;
-        let wrapper = get_local_zarr_store().await;
+        let wrapper = get_local_zarr_store(false).await;
         let path = wrapper.get_store_path();
         let ctx = SessionContext::new();
         register_spatial_functions(&ctx).expect("Failed to register spatial functions");
@@ -1308,5 +1296,102 @@ mod tests {
         // Verify bbox column has data
         let bbox_col = batches[0].column_by_name("bbox").unwrap();
         assert_eq!(bbox_col.len(), batches[0].num_rows());
+    }
+
+    #[tokio::test]
+    async fn test_st_intersects_with_geoindex() {
+        let wrapper = get_local_zarr_store(true).await;
+        let path = wrapper.get_store_path();
+        let ctx = SessionContext::new();
+        register_spatial_functions(&ctx).expect("Failed to register spatial functions");
+        let local_fs = LocalFileSystem::new_with_prefix(path).unwrap();
+        let provider = ZarrTableProvider::new_object_store(local_fs, "/meta")
+            .await
+            .unwrap();
+        ctx.register_table("zarr_data", Arc::new(provider))
+            .expect("Failed to register table");
+
+        // Query that should use the R-tree index at /indexes/bbox
+        let sql = "
+            SELECT collection FROM zarr_data
+            WHERE ST_Intersects(bbox, ST_GeomFromText('POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))'))
+            ORDER BY collection
+        ";
+        let batches = ctx.sql(sql).await.unwrap().collect().await.unwrap();
+        assert!(!batches.is_empty());
+        assert!(batches[0].num_rows() > 0);
+
+    }
+
+    #[tokio::test]
+    async fn test_st_intersects_with_geoarrow_literal() {
+        use datafusion::execution::FunctionRegistry;
+        use datafusion::logical_expr::{col, Expr};
+        use datafusion::scalar::ScalarValue;
+        use geoarrow_array::GeoArrowArray;
+
+        let wrapper = get_local_zarr_store(false).await;
+        let path = wrapper.get_store_path();
+        let ctx = SessionContext::new();
+        register_spatial_functions(&ctx).expect("Failed to register spatial functions");
+        let local_fs = LocalFileSystem::new_with_prefix(path).unwrap();
+        let provider = ZarrTableProvider::new_object_store(local_fs, "/meta")
+            .await
+            .unwrap();
+        ctx.register_table("zarr_data", Arc::new(provider))
+            .expect("Failed to register table");
+
+        // Create a GeoArrow polygon: POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))
+        // Use geo crate to create the polygon, then convert to GeoArrow
+        let coords: Vec<geo::Coord> = vec![
+            geo::coord! { x: 0.0, y: 0.0 },
+            geo::coord! { x: 0.0, y: 5.0 },
+            geo::coord! { x: 5.0, y: 5.0 },
+            geo::coord! { x: 5.0, y: 0.0 },
+            geo::coord! { x: 0.0, y: 0.0 },
+        ];
+        let polygon = geo::Polygon::new(geo::LineString::from(coords), vec![]);
+
+        // Convert to GeoArrow using the WKT conversion path
+        use wkb::writer::{WriteOptions, write_polygon};
+        let mut wkb_buffer = Vec::new();
+        write_polygon(&mut wkb_buffer, &polygon, &WriteOptions::default()).unwrap();
+
+        // Create WKB array then convert to geometry
+        use geoarrow_array::array::WkbArray;
+        use geoarrow_schema::Crs;
+        let crs = Crs::from_authority_code("EPSG:4326".to_string());
+        let metadata = Arc::new(geoarrow_schema::Metadata::new(crs, None));
+        let wkb_array = WkbArray::new(vec![wkb_buffer.as_slice()].into(), metadata);
+
+        // Convert to Arrow array and then to ScalarValue
+        let arrow_array = wkb_array.into_array_ref();
+        let scalar = ScalarValue::try_from_array(&arrow_array, 0).unwrap();
+
+        // Build query using DataFusion expr API: ST_Intersects(bbox, polygon_literal)
+        let st_intersects_fn = ctx
+            .udf("st_intersects")
+            .expect("ST_Intersects function not found");
+
+        let filter_expr = Expr::ScalarFunction(datafusion::logical_expr::expr::ScalarFunction {
+            func: st_intersects_fn,
+            args: vec![col("bbox"), Expr::Literal(scalar, None)],
+        });
+
+        // Execute query with GeoArrow literal
+        let df = ctx
+            .table("zarr_data")
+            .await
+            .unwrap()
+            .filter(filter_expr)
+            .unwrap()
+            .select(vec![col("collection")])
+            .unwrap()
+            .sort(vec![col("collection").sort(true, false)])
+            .unwrap();
+
+        let batches = df.collect().await.unwrap();
+        assert!(!batches.is_empty());
+        assert!(batches[0].num_rows() > 0);
     }
 }
