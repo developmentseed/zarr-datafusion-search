@@ -12,7 +12,7 @@ use zarr_datafusion_search::table_provider::ZarrTableProvider;
 fn datetime_bench_local(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let (session, _temp_dir) =
-        generate_icechunk_store_local(&rt, ArraysToGenerate::Datetime).unwrap();
+        generate_icechunk_store_local(&rt, &[ArraysToGenerate::Datetime]).unwrap();
     let table_provider = Arc::new(
         rt.block_on(ZarrTableProvider::new_icechunk(session, "/meta"))
             .unwrap(),

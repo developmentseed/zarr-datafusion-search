@@ -30,13 +30,12 @@ const SAMPLES_PER_DAY: usize = 10_000;
 const MS_PER_DAY: i64 = 24 * 60 * 60 * 1000; // 86,400,000 milliseconds
 const CHUNK_SIZE: u64 = 1_000_000; // 1M elements per chunk
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArraysToGenerate {
     Datetime,
     Bbox,
     BboxColumns,
     RtreeIndex,
-    All,
 }
 
 // This generates:
@@ -47,7 +46,7 @@ pub enum ArraysToGenerate {
 fn generate_icechunk_store(
     rt: &Runtime,
     storage: Arc<ObjectStorage>,
-    arrays: ArraysToGenerate,
+    arrays: &[ArraysToGenerate],
 ) -> Result<Session, Box<dyn std::error::Error>> {
     let _guard = rt.enter();
 
@@ -61,7 +60,7 @@ fn generate_icechunk_store(
     let meta_group = zarrs::group::GroupBuilder::new().build(store.clone(), "/meta")?;
     rt.block_on(meta_group.async_store_metadata())?;
 
-    let start_date = NaiveDate::from_ymd_opt(2024, 12, 1).unwrap();
+    let start_date = NaiveDate::from_ymd_opt(2010, 1, 1).unwrap();
     let end_date = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
     let num_days = (end_date - start_date).num_days() as usize;
 
@@ -86,7 +85,7 @@ fn generate_icechunk_store(
     let array_shape = vec![date_data.len() as u64];
     let chunk_shape = vec![CHUNK_SIZE];
 
-    if matches!(arrays, ArraysToGenerate::Datetime | ArraysToGenerate::All) {
+    if arrays.contains(&ArraysToGenerate::Datetime) {
         let date_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
             BloscCodec::new(
                 BloscCompressor::Zstd,
@@ -118,13 +117,13 @@ fn generate_icechunk_store(
         ))?;
     }
 
-    if matches!(arrays, ArraysToGenerate::Bbox) {
+    if arrays.contains(&ArraysToGenerate::Bbox) {
         let bbox_data = generate_wkb_polygons(array_shape[0] as usize);
 
         let bbox_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
             BloscCodec::new(
-                BloscCompressor::Zstd,
-                BloscCompressionLevel::try_from(9).unwrap(),
+                BloscCompressor::LZ4,
+                BloscCompressionLevel::try_from(3).unwrap(),
                 None, // no typesize for variable-length data
                 BloscShuffleMode::NoShuffle,
                 None,
@@ -149,10 +148,7 @@ fn generate_icechunk_store(
         ))?;
     }
 
-    if matches!(
-        arrays,
-        ArraysToGenerate::BboxColumns | ArraysToGenerate::All
-    ) {
+    if arrays.contains(&ArraysToGenerate::BboxColumns) {
         let (xmin, xmax, ymin, ymax) = generate_bbox_columns(array_shape[0] as usize);
 
         let f64_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
@@ -231,10 +227,7 @@ fn generate_icechunk_store(
         ))?;
 
     }
-    if matches!(
-        arrays,
-        ArraysToGenerate::RtreeIndex | ArraysToGenerate::All
-    ) {
+    if arrays.contains(&ArraysToGenerate::RtreeIndex) {
         let index_group = zarrs::group::GroupBuilder::new().build(store.clone(), "/indexes")?;
         rt.block_on(index_group.async_store_metadata())?;
 
@@ -262,8 +255,8 @@ fn generate_icechunk_store(
         // Store the R-tree as a special array with compression
         let rtree_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
             BloscCodec::new(
-                BloscCompressor::Zstd,
-                BloscCompressionLevel::try_from(9).unwrap(),
+                BloscCompressor::LZ4,
+                BloscCompressionLevel::try_from(3).unwrap(),
                 None,
                 BloscShuffleMode::NoShuffle,
                 None,
@@ -324,7 +317,7 @@ fn generate_icechunk_store(
 
 pub fn generate_icechunk_store_local(
     rt: &Runtime,
-    arrays: ArraysToGenerate,
+    arrays: &[ArraysToGenerate],
 ) -> Result<(Session, TempDir), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
     let storage = rt.block_on(ObjectStorage::new_local_filesystem(temp_dir.path()))?;
@@ -336,6 +329,7 @@ pub fn generate_icechunk_store_s3(
     rt: &Runtime,
     bucket: String,
     prefix: String,
+    arrays: &[ArraysToGenerate],
 ) -> Result<Session, Box<dyn std::error::Error>> {
     let storage = rt.block_on(ObjectStorage::new_s3(
         bucket,
@@ -343,7 +337,7 @@ pub fn generate_icechunk_store_s3(
         None, // credentials - uses default AWS credential chain
         None, // config - uses default S3 options
     ))?;
-    let session = generate_icechunk_store(rt, Arc::new(storage), ArraysToGenerate::All)?;
+    let session = generate_icechunk_store(rt, Arc::new(storage), arrays)?;
     Ok(session)
 }
 
@@ -366,8 +360,8 @@ pub fn run_bench(
         b.to_async(rt).iter(|| async {
             let df = ctx.sql(black_box(sql)).await.unwrap();
             let batches = df.collect().await.unwrap();
-            // let row_count: usize = batches.iter().map(|batch| batch.num_rows()).sum();
-            // println!("Query returned {} rows", row_count);
+             let row_count: usize = batches.iter().map(|batch| batch.num_rows()).sum();
+             println!("Query returned {} rows", row_count);
             batches
         });
     });
@@ -397,7 +391,7 @@ pub static DATETIME_SQL: &str = "\
 ";
 
 pub static BBOX_SQL: &str = "\
-    SELECT bbox FROM zarr_data \
+    SELECT date FROM zarr_data \
     WHERE ST_Intersects(bbox, ST_GeomFromText('POLYGON((0 -7, 0 7, 5 7, 5 -7, 0 -7))')) \
 ";
 
