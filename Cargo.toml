@@ -63,6 +63,8 @@ harness = false
 test = false
 
 [[bench]]
-name = "rtree_index_local"
+name = "bbox_zarrs_raw"
 harness = false
 test = false
+
+

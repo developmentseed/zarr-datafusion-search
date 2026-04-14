@@ -9,7 +9,7 @@ use zarrs_icechunk::AsyncIcechunkStore;
 
 fn bbox_zarrs_raw_bench(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    let (session, _temp_dir) = generate_icechunk_store_local(&rt, ArraysToGenerate::Bbox).unwrap();
+    let (session, _temp_dir) = generate_icechunk_store_local(&rt, &[ArraysToGenerate::Bbox]).unwrap();
     let store = Arc::new(AsyncIcechunkStore::new(session));
 
     // Criterion benchmark
@@ -29,8 +29,13 @@ fn bbox_zarrs_raw_bench(c: &mut Criterion) {
             let num_chunks: u64 = chunk_grid_shape.iter().product();
 
             let mut total_rows = 0usize;
+            let max_rows = 3_000_000;
 
             for chunk_idx in 0..num_chunks {
+                if total_rows >= max_rows {
+                    break;
+                }
+
                 let chunk_indices = vec![chunk_idx];
                 let subset = bbox_array.chunk_subset_bounded(&chunk_indices).unwrap();
 
@@ -42,7 +47,7 @@ fn bbox_zarrs_raw_bench(c: &mut Criterion) {
                 total_rows += data.len();
             }
 
-            total_rows
+            total_rows.min(max_rows)
         });
     });
 
