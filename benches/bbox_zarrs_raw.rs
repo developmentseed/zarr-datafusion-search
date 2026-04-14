@@ -9,7 +9,8 @@ use zarrs_icechunk::AsyncIcechunkStore;
 
 fn bbox_zarrs_raw_bench(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
-    let (session, _temp_dir) = generate_icechunk_store_local(&rt, &[ArraysToGenerate::Bbox]).unwrap();
+    let (session, _temp_dir) =
+        generate_icechunk_store_local(&rt, &[ArraysToGenerate::Bbox]).unwrap();
     let store = Arc::new(AsyncIcechunkStore::new(session));
 
     // Criterion benchmark

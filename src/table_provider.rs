@@ -45,6 +45,12 @@ use crate::error::{ZarrDataFusionError, ZarrDataFusionResult};
 use crate::schema::group_arrays_schema_async;
 use geo_index::rtree::RTreeIndex;
 
+/// Maps chunk indices to row indices within those chunks
+type ChunkRowMap = HashMap<Vec<u64>, Vec<u64>>;
+
+/// Result from spatial index query: (chunk_to_rows map, handled_filter_index)
+type SpatialIndexResult = (ChunkRowMap, usize);
+
 pub fn register_spatial_functions(ctx: &SessionContext) -> Result<()> {
     geodatafusion::register(ctx);
     Ok(())
@@ -173,11 +179,11 @@ impl TableProvider for ZarrTableProvider {
             .iter()
             .map(|filter| {
                 // Check if this filter can be handled by spatial index
-                if let Some((array_name, _)) = extract_st_intersects_bbox(filter) {
-                    if self.rtree_indexes.contains_key(&array_name) {
-                        // We have a spatial index - we can handle this exactly
-                        return TableProviderFilterPushDown::Exact;
-                    }
+                if let Some((array_name, _)) = extract_st_intersects_bbox(filter)
+                    && self.rtree_indexes.contains_key(&array_name)
+                {
+                    // We have a spatial index - we can handle this exactly
+                    return TableProviderFilterPushDown::Exact;
                 }
                 // Otherwise inexact
                 TableProviderFilterPushDown::Inexact
@@ -399,7 +405,7 @@ fn st_intersects_query_index(
     indexes: &HashMap<String, Vec<u8>>,
     arrays: &HashMap<String, Array<Arc<dyn AsyncReadableListableStorageTraits>>>,
     chunk_grid_shape: &[u64],
-) -> Option<(HashMap<Vec<u64>, Vec<u64>>, usize)> {
+) -> Option<SpatialIndexResult> {
     use geo_index::rtree::RTreeRef;
 
     // Look for ST_Intersects(column, ST_GeomFromText('POLYGON(...)'))
@@ -414,11 +420,8 @@ fn st_intersects_query_index(
 
                     // Group row indices by chunk
                     if let Some(array) = arrays.get(&array_name) {
-                        let chunk_map = group_row_indices_by_chunk(
-                            &matching_indices,
-                            array,
-                            chunk_grid_shape,
-                        );
+                        let chunk_map =
+                            group_row_indices_by_chunk(&matching_indices, array, chunk_grid_shape);
                         return Some((chunk_map, filter_idx));
                     }
                 }
@@ -500,7 +503,9 @@ fn compute_bbox_from_coords(
 }
 
 /// Extract bounding box from a GeoArrow geometry literal
-fn extract_bbox_from_geoarrow_literal(value: &datafusion::scalar::ScalarValue) -> Option<(f32, f32, f32, f32)> {
+fn extract_bbox_from_geoarrow_literal(
+    value: &datafusion::scalar::ScalarValue,
+) -> Option<(f32, f32, f32, f32)> {
     use arrow::array::{Array, AsArray};
     use datafusion::scalar::ScalarValue;
 
@@ -544,9 +549,7 @@ fn extract_bbox_from_geoarrow_literal(value: &datafusion::scalar::ScalarValue) -
 /// Example: "POLYGON((0 -7, 0 7, 5 7, 5 -7, 0 -7))" -> (0.0, -7.0, 5.0, 7.0)
 fn parse_polygon_bbox(wkt: &str) -> Option<(f32, f32, f32, f32)> {
     // Simple parser for POLYGON((x1 y1, x2 y2, ...))
-    let coords_str = wkt
-        .strip_prefix("POLYGON((")?
-        .strip_suffix("))")?;
+    let coords_str = wkt.strip_prefix("POLYGON((")?.strip_suffix("))")?;
 
     let mut minx = f32::MAX;
     let mut miny = f32::MAX;
@@ -554,14 +557,14 @@ fn parse_polygon_bbox(wkt: &str) -> Option<(f32, f32, f32, f32)> {
     let mut maxy = f32::MIN;
 
     for point in coords_str.split(',') {
-        let coords: Vec<&str> = point.trim().split_whitespace().collect();
-        if coords.len() >= 2 {
-            if let (Ok(x), Ok(y)) = (coords[0].parse::<f32>(), coords[1].parse::<f32>()) {
-                minx = minx.min(x);
-                maxx = maxx.max(x);
-                miny = miny.min(y);
-                maxy = maxy.max(y);
-            }
+        let coords: Vec<&str> = point.split_whitespace().collect();
+        if coords.len() >= 2
+            && let (Ok(x), Ok(y)) = (coords[0].parse::<f32>(), coords[1].parse::<f32>())
+        {
+            minx = minx.min(x);
+            maxx = maxx.max(x);
+            miny = miny.min(y);
+            maxy = maxy.max(y);
         }
     }
 
@@ -581,19 +584,16 @@ fn group_row_indices_by_chunk(
     row_indices: &[u32],
     array: &Array<Arc<dyn AsyncReadableListableStorageTraits>>,
     _chunk_grid_shape: &[u64],
-) -> HashMap<Vec<u64>, Vec<u64>> {
-    let mut chunk_to_rows: HashMap<Vec<u64>, Vec<u64>> = HashMap::new();
+) -> ChunkRowMap {
+    let mut chunk_to_rows: ChunkRowMap = HashMap::new();
 
     // Get the chunk shape for the first chunk (assuming regular grid)
     let chunk_shape = match array.chunk_shape(&[0]) {
-        Ok(shape) => {
-            shape
-        }
+        Ok(shape) => shape,
         Err(_e) => {
             return chunk_to_rows; // Return empty if can't get chunk shape
         }
     };
-
 
     for &row_idx in row_indices {
         let row_idx = row_idx as u64;
@@ -604,7 +604,7 @@ fn group_row_indices_by_chunk(
             let chunk_idx = vec![row_idx / chunk_size];
             let local_idx = row_idx % chunk_size;
 
-            chunk_to_rows.entry(chunk_idx).or_insert_with(Vec::new).push(local_idx);
+            chunk_to_rows.entry(chunk_idx).or_default().push(local_idx);
         } else {
             // For multi-dimensional, would need to calculate properly
             // For now, assume 1D
@@ -612,10 +612,9 @@ fn group_row_indices_by_chunk(
             let chunk_idx = vec![row_idx / chunk_size];
             let local_idx = row_idx % chunk_size;
 
-            chunk_to_rows.entry(chunk_idx).or_insert_with(Vec::new).push(local_idx);
+            chunk_to_rows.entry(chunk_idx).or_default().push(local_idx);
         }
     }
-
 
     chunk_to_rows
 }
@@ -649,47 +648,48 @@ async fn scan_chunks_async(
         .ok_or(ZarrDataFusionError::Custom("No arrays to scan".into()))?;
 
     // Try to use spatial index to filter chunks
-    let spatial_index_result = st_intersects_query_index(
-        &filters,
-        &rtree_indexes,
-        &arrays,
-        &chunk_grid_shape,
-    );
+    let spatial_index_result =
+        st_intersects_query_index(&filters, &rtree_indexes, &arrays, chunk_grid_shape);
 
     // If spatial index was used, remove that filter from evaluation (skip WKB decode!)
-    let (filters_to_evaluate, filter_col_names_to_load) = if let Some((_, handled_filter_idx)) = &spatial_index_result {
-        let mut remaining_filters = Vec::new();
+    let (filters_to_evaluate, filter_col_names_to_load) =
+        if let Some((_, handled_filter_idx)) = &spatial_index_result {
+            let mut remaining_filters = Vec::new();
 
-        for (idx, filter) in filters.iter().enumerate() {
-            if idx != *handled_filter_idx {
-                remaining_filters.push(filter.clone());
+            for (idx, filter) in filters.iter().enumerate() {
+                if idx != *handled_filter_idx {
+                    remaining_filters.push(filter.clone());
+                }
             }
-        }
 
-        // Recalculate which columns we need for the remaining filters
-        let mut remaining_cols = HashSet::new();
-        for filter in &remaining_filters {
-            collect_columns_from_expr(filter, &mut remaining_cols);
-        }
+            // Recalculate which columns we need for the remaining filters
+            let mut remaining_cols = HashSet::new();
+            for filter in &remaining_filters {
+                collect_columns_from_expr(filter, &mut remaining_cols);
+            }
 
-        (remaining_filters, remaining_cols)
-    } else {
-        (filters.clone(), filter_col_names.clone())
-    };
+            (remaining_filters, remaining_cols)
+        } else {
+            (filters.clone(), filter_col_names.clone())
+        };
 
     // Determine which chunks to scan and optionally which rows within each chunk
-    let chunk_tasks: Vec<(Vec<u64>, Option<Vec<u64>>)> = if let Some((chunk_to_rows, _)) = spatial_index_result {
-        // Use filtered chunks from spatial index with specific row indices
-        chunk_to_rows.into_iter().map(|(chunk_idx, row_indices)| (chunk_idx, Some(row_indices))).collect()
-    } else {
-        // No spatial filter or index - scan all chunks, all rows
-        let ranges: Vec<Range<u64>> = chunk_grid_shape.iter().map(|&n| 0..n).collect();
-        ArraySubset::new_with_ranges(&ranges)
-            .indices()
-            .into_iter()
-            .map(|chunk_idx| (chunk_idx, None))
-            .collect()
-    };
+    let chunk_tasks: Vec<(Vec<u64>, Option<Vec<u64>>)> =
+        if let Some((chunk_to_rows, _)) = spatial_index_result {
+            // Use filtered chunks from spatial index with specific row indices
+            chunk_to_rows
+                .into_iter()
+                .map(|(chunk_idx, row_indices)| (chunk_idx, Some(row_indices)))
+                .collect()
+        } else {
+            // No spatial filter or index - scan all chunks, all rows
+            let ranges: Vec<Range<u64>> = chunk_grid_shape.iter().map(|&n| 0..n).collect();
+            ArraySubset::new_with_ranges(&ranges)
+                .indices()
+                .into_iter()
+                .map(|chunk_idx| (chunk_idx, None))
+                .collect()
+        };
 
     // Wrap arrays in Arc so they can be shared across spawned tasks.
     let arrays = Arc::new(arrays);
@@ -746,7 +746,7 @@ async fn scan_chunks_async(
 
     // Await all tasks, propagating any errors.
     let mut batches = Vec::new();
-    for (_task_idx, task) in tasks.into_iter().enumerate() {
+    for task in tasks.into_iter() {
         match task.await {
             Ok(Ok(Some(batch))) => {
                 batches.push(batch);
@@ -798,7 +798,8 @@ async fn process_chunk_with_row_filter_async(
                 ZarrDataFusionError::Custom(format!("No open array for filter column '{col_name}'"))
             })?;
             let field = table_schema.field_with_name(col_name)?;
-            let full_chunk_array = retrieve_chunk_as_arrow_async(zarr_array, field, chunk_indices).await?;
+            let full_chunk_array =
+                retrieve_chunk_as_arrow_async(zarr_array, field, chunk_indices).await?;
             let candidate_array = take(full_chunk_array.as_ref(), &indices_array, None)?;
             filter_arrays.push((col_name.clone(), candidate_array));
         }
@@ -844,7 +845,8 @@ async fn process_chunk_with_row_filter_async(
                 ))
             })?;
             let table_field = table_schema.field_with_name(col_name)?;
-            let full_chunk_array = retrieve_chunk_as_arrow_async(zarr_array, table_field, chunk_indices).await?;
+            let full_chunk_array =
+                retrieve_chunk_as_arrow_async(zarr_array, table_field, chunk_indices).await?;
             take(full_chunk_array.as_ref(), &final_indices_array, None)?
         };
 
@@ -1320,13 +1322,12 @@ mod tests {
         let batches = ctx.sql(sql).await.unwrap().collect().await.unwrap();
         assert!(!batches.is_empty());
         assert!(batches[0].num_rows() > 0);
-
     }
 
     #[tokio::test]
     async fn test_st_intersects_with_geoarrow_literal() {
         use datafusion::execution::FunctionRegistry;
-        use datafusion::logical_expr::{col, Expr};
+        use datafusion::logical_expr::{Expr, col};
         use datafusion::scalar::ScalarValue;
         use geoarrow_array::GeoArrowArray;
 

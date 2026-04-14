@@ -225,7 +225,6 @@ fn generate_icechunk_store(
             &ArraySubset::new_with_shape(array_shape.clone()),
             &ymax,
         ))?;
-
     }
     if arrays.contains(&ArraysToGenerate::RtreeIndex) {
         let index_group = zarrs::group::GroupBuilder::new().build(store.clone(), "/indexes")?;
@@ -239,7 +238,12 @@ fn generate_icechunk_store(
         // Use f32 instead of f64 to reduce index size by ~50%
         let mut rtree_builder = RTreeBuilder::<f32>::new(xmin.len() as u32);
         for i in 0..xmin.len() {
-            rtree_builder.add(xmin[i] as f32, ymin[i] as f32, xmax[i] as f32, ymax[i] as f32);
+            rtree_builder.add(
+                xmin[i] as f32,
+                ymin[i] as f32,
+                xmax[i] as f32,
+                ymax[i] as f32,
+            );
         }
         let rtree = rtree_builder.finish::<HilbertSort>();
         let rtree_bytes = rtree.into_inner();
@@ -282,9 +286,7 @@ fn generate_icechunk_store(
         // Read back the compressed chunk to show actual storage size
         use zarrs::storage::AsyncReadableStorageTraits;
         let chunk_key = rtree_array.chunk_key(&[0]);
-        let compressed_chunk = rt.block_on(async {
-            store.get(&chunk_key).await
-        })?;
+        let compressed_chunk = rt.block_on(async { store.get(&chunk_key).await })?;
         if let Some(chunk_bytes) = compressed_chunk {
             let compression_ratio = rtree_bytes.len() as f64 / chunk_bytes.len() as f64;
             println!(
@@ -297,7 +299,6 @@ fn generate_icechunk_store(
             println!("R-tree index stored in Zarr at /indexes/bbox");
         }
     }
-
 
     rt.block_on(async {
         store
@@ -360,8 +361,8 @@ pub fn run_bench(
         b.to_async(rt).iter(|| async {
             let df = ctx.sql(black_box(sql)).await.unwrap();
             let batches = df.collect().await.unwrap();
-             let row_count: usize = batches.iter().map(|batch| batch.num_rows()).sum();
-             println!("Query returned {} rows", row_count);
+            let row_count: usize = batches.iter().map(|batch| batch.num_rows()).sum();
+            println!("Query returned {} rows", row_count);
             batches
         });
     });
