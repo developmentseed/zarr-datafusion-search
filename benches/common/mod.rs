@@ -32,6 +32,7 @@ static ALLOC: dhat::Alloc = dhat::Alloc;
 const SAMPLES_PER_DAY: usize = 10_000;
 const MS_PER_DAY: i64 = 24 * 60 * 60 * 1000; // 86,400,000 milliseconds
 const CHUNK_SIZE: u64 = 1_000_000; // 1M elements per chunk
+const MEGA_BYTE: f64 = 1_048_576.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArraysToGenerate {
