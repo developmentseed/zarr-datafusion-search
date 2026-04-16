@@ -25,6 +25,7 @@ use datafusion::physical_plan::{
 };
 use datafusion::prelude::SessionContext;
 use futures::TryStreamExt;
+use geo_index::rtree::RTreeRef;
 use object_store::ObjectStore;
 #[cfg(test)]
 use object_store::local::LocalFileSystem;
@@ -406,8 +407,6 @@ fn st_intersects_query_index(
     arrays: &HashMap<String, Array<Arc<dyn AsyncReadableListableStorageTraits>>>,
     chunk_grid_shape: &[u64],
 ) -> Option<SpatialIndexResult> {
-    use geo_index::rtree::RTreeRef;
-
     // Look for ST_Intersects(column, ST_GeomFromText('POLYGON(...)'))
     for (filter_idx, filter) in filters.iter().enumerate() {
         if let Some((array_name, bbox)) = extract_st_intersects_bbox(filter) {
