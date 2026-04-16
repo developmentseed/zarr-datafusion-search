@@ -67,4 +67,10 @@ name = "bbox_zarrs_raw"
 harness = false
 test = false
 
+[[bench]]
+name = "bbox_s3"
+harness = false
+test = false
+
+
 

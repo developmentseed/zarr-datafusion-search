@@ -7,7 +7,7 @@ use chrono::NaiveDate;
 use criterion::{Criterion, SamplingMode};
 use datafusion::prelude::SessionContext;
 use icechunk::session::Session;
-use icechunk::{ObjectStorage, Repository, repository::VersionInfo};
+use icechunk::{ObjectStorage, Repository, RepositoryConfig, repository::VersionInfo};
 use rand::Rng;
 use std::collections::HashMap;
 use std::hint::black_box;
@@ -28,7 +28,7 @@ static ALLOC: dhat::Alloc = dhat::Alloc;
 
 const SAMPLES_PER_DAY: usize = 10_000;
 const MS_PER_DAY: i64 = 24 * 60 * 60 * 1000; // 86,400,000 milliseconds
-const CHUNK_SIZE: u64 = 1_000_000; // 1M elements per chunk
+const CHUNK_SIZE: u64 = 100_000; // 1M elements per chunk
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArraysToGenerate {
@@ -49,8 +49,31 @@ fn generate_icechunk_store(
     arrays: &[ArraysToGenerate],
 ) -> Result<Session, Box<dyn std::error::Error>> {
     let _guard = rt.enter();
+    use icechunk::storage::{
+        Settings,
+        RetriesSettings,
+    };
 
-    let repo = rt.block_on(Repository::create(None, storage, HashMap::new()))?;
+    let settings = Settings {
+        concurrency: None,
+        retries: Some(RetriesSettings {
+            max_tries: std::num::NonZero::new(20),
+            ..Default::default()
+        }),
+        storage_class: None,
+        metadata_storage_class: None,
+        chunks_storage_class: None,
+        minimum_size_for_multipart_upload: Some(100 * 1024 * 1024), // 100 MB
+        unsafe_use_conditional_update: Some(false),
+        unsafe_use_conditional_create: None,
+        unsafe_use_metadata: None,
+    };
+
+    let config = RepositoryConfig {
+        storage: Some(settings),
+        ..Default::default()
+    };
+    let repo = rt.block_on(Repository::create(Some(config), storage, HashMap::new()))?;
     let session = rt.block_on(repo.writable_session("main")).unwrap();
     let store = Arc::new(AsyncIcechunkStore::new(session.clone()));
 
@@ -233,17 +256,16 @@ fn generate_icechunk_store(
         let (xmin, xmax, ymin, ymax) = generate_bbox_columns(array_shape[0] as usize);
         let start = std::time::Instant::now();
 
-        use geo_index::rtree::{RTreeBuilder, sort::HilbertSort};
+        use geo_index::rtree::{RTreeBuilder, sort::HilbertSort, util::f64_box_to_f32};
 
-        // Use f32 instead of f64 to reduce index size by ~50%
+        // Use f32 instead of f64 to reduce index size by ~50%, using f64_box_to_f32
+        // to ensure each f32 box is no smaller than the original f64 box (prevents
+        // false negatives during spatial filtering due to precision loss).
         let mut rtree_builder = RTreeBuilder::<f32>::new(xmin.len() as u32);
         for i in 0..xmin.len() {
-            rtree_builder.add(
-                xmin[i] as f32,
-                ymin[i] as f32,
-                xmax[i] as f32,
-                ymax[i] as f32,
-            );
+            let (min_x, min_y, max_x, max_y) =
+                f64_box_to_f32(xmin[i], ymin[i], xmax[i], ymax[i]);
+            rtree_builder.add(min_x, min_y, max_x, max_y);
         }
         let rtree = rtree_builder.finish::<HilbertSort>();
         let rtree_bytes = rtree.into_inner();
