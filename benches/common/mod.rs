@@ -233,17 +233,16 @@ fn generate_icechunk_store(
         let (xmin, xmax, ymin, ymax) = generate_bbox_columns(array_shape[0] as usize);
         let start = std::time::Instant::now();
 
-        use geo_index::rtree::{RTreeBuilder, sort::HilbertSort};
+        use geo_index::rtree::{RTreeBuilder, sort::HilbertSort, util::f64_box_to_f32};
 
-        // Use f32 instead of f64 to reduce index size by ~50%
+        // Use f32 instead of f64 to reduce index size by ~50%, using f64_box_to_f32
+        // to ensure each f32 box is no smaller than the original f64 box (prevents
+        // false negatives during spatial filtering due to precision loss).
         let mut rtree_builder = RTreeBuilder::<f32>::new(xmin.len() as u32);
         for i in 0..xmin.len() {
-            rtree_builder.add(
-                xmin[i] as f32,
-                ymin[i] as f32,
-                xmax[i] as f32,
-                ymax[i] as f32,
-            );
+            let (min_x, min_y, max_x, max_y) =
+                f64_box_to_f32(xmin[i], ymin[i], xmax[i], ymax[i]);
+            rtree_builder.add(min_x, min_y, max_x, max_y);
         }
         let rtree = rtree_builder.finish::<HilbertSort>();
         let rtree_bytes = rtree.into_inner();
@@ -256,7 +255,6 @@ fn generate_icechunk_store(
             rtree_bytes.len() as f64 / 1_048_576.0
         );
 
-        // Store the R-tree as a special array with compression
         let rtree_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
             BloscCodec::new(
                 BloscCompressor::LZ4,

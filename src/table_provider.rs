@@ -43,7 +43,7 @@ use zarrs_icechunk::AsyncIcechunkStore;
 
 use crate::error::{ZarrDataFusionError, ZarrDataFusionResult};
 use crate::schema::group_arrays_schema_async;
-use geo_index::rtree::RTreeIndex;
+use geo_index::rtree::{RTreeIndex, util::f64_box_to_f32};
 
 /// Maps chunk indices to row indices within those chunks
 type ChunkRowMap = HashMap<Vec<u64>, Vec<u64>>;
@@ -481,22 +481,22 @@ fn compute_bbox_from_coords(
     x_arr: &arrow::array::PrimitiveArray<arrow::datatypes::Float64Type>,
     y_arr: &arrow::array::PrimitiveArray<arrow::datatypes::Float64Type>,
 ) -> Option<(f32, f32, f32, f32)> {
-    let mut minx = f32::MAX;
-    let mut miny = f32::MAX;
-    let mut maxx = f32::MIN;
-    let mut maxy = f32::MIN;
+    let mut minx = f64::MAX;
+    let mut miny = f64::MAX;
+    let mut maxx = f64::MIN;
+    let mut maxy = f64::MIN;
 
     for i in 0..x_arr.len() {
-        let x = x_arr.value(i) as f32;
-        let y = y_arr.value(i) as f32;
+        let x = x_arr.value(i);
+        let y = y_arr.value(i);
         minx = minx.min(x);
         maxx = maxx.max(x);
         miny = miny.min(y);
         maxy = maxy.max(y);
     }
 
-    if minx != f32::MAX {
-        Some((minx, miny, maxx, maxy))
+    if minx != f64::MAX {
+        Some(f64_box_to_f32(minx, miny, maxx, maxy))
     } else {
         None
     }
@@ -551,15 +551,15 @@ fn parse_polygon_bbox(wkt: &str) -> Option<(f32, f32, f32, f32)> {
     // Simple parser for POLYGON((x1 y1, x2 y2, ...))
     let coords_str = wkt.strip_prefix("POLYGON((")?.strip_suffix("))")?;
 
-    let mut minx = f32::MAX;
-    let mut miny = f32::MAX;
-    let mut maxx = f32::MIN;
-    let mut maxy = f32::MIN;
+    let mut minx = f64::MAX;
+    let mut miny = f64::MAX;
+    let mut maxx = f64::MIN;
+    let mut maxy = f64::MIN;
 
     for point in coords_str.split(',') {
         let coords: Vec<&str> = point.split_whitespace().collect();
         if coords.len() >= 2
-            && let (Ok(x), Ok(y)) = (coords[0].parse::<f32>(), coords[1].parse::<f32>())
+            && let (Ok(x), Ok(y)) = (coords[0].parse::<f64>(), coords[1].parse::<f64>())
         {
             minx = minx.min(x);
             maxx = maxx.max(x);
@@ -568,8 +568,8 @@ fn parse_polygon_bbox(wkt: &str) -> Option<(f32, f32, f32, f32)> {
         }
     }
 
-    if minx != f32::MAX {
-        Some((minx, miny, maxx, maxy))
+    if minx != f64::MAX {
+        Some(f64_box_to_f32(minx, miny, maxx, maxy))
     } else {
         None
     }
