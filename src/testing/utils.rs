@@ -174,7 +174,7 @@ pub(crate) async fn generate_test_data_arrays(
 
     // Generate R-tree spatial index if requested
     if include_geoindex {
-        use geo_index::rtree::{RTreeBuilder, sort::HilbertSort};
+        use geo_index::rtree::{RTreeBuilder, sort::HilbertSort, util::f64_box_to_f32};
 
         // Create /indexes group
         let index_group = zarrs::group::GroupBuilder::new().build(store.clone(), "/indexes")?;
@@ -196,12 +196,8 @@ pub(crate) async fn generate_test_data_arrays(
         // Build R-tree index
         let mut rtree_builder = RTreeBuilder::<f32>::new(boxes.len() as u32);
         for i in 0..boxes.len() {
-            rtree_builder.add(
-                xmin[i] as f32,
-                ymin[i] as f32,
-                xmax[i] as f32,
-                ymax[i] as f32,
-            );
+            let (min_x, min_y, max_x, max_y) = f64_box_to_f32(xmin[i], ymin[i], xmax[i], ymax[i]);
+            rtree_builder.add(min_x, min_y, max_x, max_y);
         }
         let rtree = rtree_builder.finish::<HilbertSort>();
         let rtree_bytes = rtree.into_inner();
