@@ -6,6 +6,7 @@ use bytesize::ByteSize;
 use chrono::NaiveDate;
 use criterion::{Criterion, SamplingMode};
 use datafusion::prelude::SessionContext;
+use geo_index::rtree::{RTreeBuilder, sort::HilbertSort, util::f64_box_to_f32};
 use icechunk::session::Session;
 use icechunk::{ObjectStorage, Repository, repository::VersionInfo};
 use rand::Rng;
@@ -14,10 +15,12 @@ use std::hint::black_box;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
+
 use zarrs::array::codec::{BloscCodec, BloscCompressionLevel, BloscCompressor, BloscShuffleMode};
 use zarrs::array::{ArrayBuilder, DataType, FillValue};
 use zarrs::array_subset::ArraySubset;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
+use zarrs::storage::AsyncReadableStorageTraits;
 use zarrs_icechunk::AsyncIcechunkStore;
 
 mod sentinel2_geometry;
@@ -233,15 +236,12 @@ fn generate_icechunk_store(
         let (xmin, xmax, ymin, ymax) = generate_bbox_columns(array_shape[0] as usize);
         let start = std::time::Instant::now();
 
-        use geo_index::rtree::{RTreeBuilder, sort::HilbertSort, util::f64_box_to_f32};
-
         // Use f32 instead of f64 to reduce index size by ~50%, using f64_box_to_f32
         // to ensure each f32 box is no smaller than the original f64 box (prevents
         // false negatives during spatial filtering due to precision loss).
         let mut rtree_builder = RTreeBuilder::<f32>::new(xmin.len() as u32);
         for i in 0..xmin.len() {
-            let (min_x, min_y, max_x, max_y) =
-                f64_box_to_f32(xmin[i], ymin[i], xmax[i], ymax[i]);
+            let (min_x, min_y, max_x, max_y) = f64_box_to_f32(xmin[i], ymin[i], xmax[i], ymax[i]);
             rtree_builder.add(min_x, min_y, max_x, max_y);
         }
         let rtree = rtree_builder.finish::<HilbertSort>();
@@ -282,7 +282,6 @@ fn generate_icechunk_store(
         ))?;
 
         // Read back the compressed chunk to show actual storage size
-        use zarrs::storage::AsyncReadableStorageTraits;
         let chunk_key = rtree_array.chunk_key(&[0]);
         let compressed_chunk = rt.block_on(async { store.get(&chunk_key).await })?;
         if let Some(chunk_bytes) = compressed_chunk {
