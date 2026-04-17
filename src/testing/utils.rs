@@ -78,9 +78,12 @@ impl LocalIcechunkStoreWrapper {
 /// - date: datetime64[ms] array with dates [2023-01-01, 2023-01-02, 2023-01-03]
 /// - collection: variable length UTF8 array with ["collection_a", "collection_b", "collection_c"]
 /// - bbox: variable length bytes array with WKB-encoded boxes
+///
+/// Optionally creates R-tree spatial index in /indexes/bbox if `include_geoindex` is true
 #[cfg(test)]
 pub(crate) async fn generate_test_data_arrays(
     store: Arc<dyn AsyncReadableWritableListableStorageTraits>,
+    include_geoindex: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use chrono::NaiveDate;
 
@@ -154,8 +157,8 @@ pub(crate) async fn generate_test_data_arrays(
 
     let write_options = WriteOptions::default();
     let mut bbox_data: Vec<Vec<u8>> = Vec::new();
-    for rect in boxes {
-        let polygon: Polygon = rect.into();
+    for rect in &boxes {
+        let polygon: Polygon = (*rect).into();
         let mut buffer = Vec::new();
         write_polygon(&mut buffer, &polygon, &write_options)?;
         bbox_data.push(buffer);
@@ -169,22 +172,78 @@ pub(crate) async fn generate_test_data_arrays(
         .async_store_array_subset_elements(&ArraySubset::new_with_shape(vec![3]), &bbox_data)
         .await?;
 
+    // Generate R-tree spatial index if requested
+    if include_geoindex {
+        use geo_index::rtree::{RTreeBuilder, sort::HilbertSort, util::f64_box_to_f32};
+
+        // Create /indexes group
+        let index_group = zarrs::group::GroupBuilder::new().build(store.clone(), "/indexes")?;
+        index_group.async_store_metadata().await?;
+
+        // Extract bounding boxes from the test data
+        let mut xmin = Vec::new();
+        let mut ymin = Vec::new();
+        let mut xmax = Vec::new();
+        let mut ymax = Vec::new();
+
+        for rect in &boxes {
+            xmin.push(rect.min().x);
+            ymin.push(rect.min().y);
+            xmax.push(rect.max().x);
+            ymax.push(rect.max().y);
+        }
+
+        // Build R-tree index
+        let mut rtree_builder = RTreeBuilder::<f32>::new(boxes.len() as u32);
+        for i in 0..boxes.len() {
+            let (min_x, min_y, max_x, max_y) = f64_box_to_f32(xmin[i], ymin[i], xmax[i], ymax[i]);
+            rtree_builder.add(min_x, min_y, max_x, max_y);
+        }
+        let rtree = rtree_builder.finish::<HilbertSort>();
+        let rtree_bytes = rtree.into_inner();
+
+        // Store R-tree as a Zarr array
+        let rtree_array = ArrayBuilder::new(
+            vec![rtree_bytes.len() as u64],
+            vec![rtree_bytes.len() as u64], // Single chunk
+            DataType::UInt8,
+            FillValue::from(0u8),
+        )
+        .build(store.clone(), "/indexes/bbox")?;
+
+        rtree_array.async_store_metadata().await?;
+        rtree_array
+            .async_store_array_subset_elements(
+                &ArraySubset::new_with_shape(vec![rtree_bytes.len() as u64]),
+                rtree_bytes.as_slice(),
+            )
+            .await?;
+    }
+
     Ok(())
 }
 
-pub(crate) async fn get_local_zarr_store() -> LocalZarrStoreWrapper {
+/// Get a local Zarr store with test data
+///
+/// # Arguments
+/// * `include_geoindex` - If true, generates an R-tree spatial index at /indexes/bbox
+pub(crate) async fn get_local_zarr_store(include_geoindex: bool) -> LocalZarrStoreWrapper {
     let wrapper = LocalZarrStoreWrapper::new();
     let store = wrapper.get_store();
-    generate_test_data_arrays(store)
+    generate_test_data_arrays(store, include_geoindex)
         .await
         .expect("Failed to generate test data arrays");
     wrapper
 }
 
-pub(crate) async fn get_local_icechunk_store() -> LocalIcechunkStoreWrapper {
+/// Get a local Icechunk store with test data
+///
+/// # Arguments
+/// * `include_geoindex` - If true, generates an R-tree spatial index at /indexes/bbox
+pub(crate) async fn get_local_icechunk_store(include_geoindex: bool) -> LocalIcechunkStoreWrapper {
     let wrapper = LocalIcechunkStoreWrapper::new().await;
     let store = wrapper.get_store();
-    generate_test_data_arrays(store.clone())
+    generate_test_data_arrays(store.clone(), include_geoindex)
         .await
         .expect("Failed to generate test data arrays");
     let _ = store

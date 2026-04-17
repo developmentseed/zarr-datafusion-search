@@ -6,6 +6,7 @@ use bytesize::ByteSize;
 use chrono::NaiveDate;
 use criterion::{Criterion, SamplingMode};
 use datafusion::prelude::SessionContext;
+use geo_index::rtree::{RTreeBuilder, sort::HilbertSort, util::f64_box_to_f32};
 use icechunk::session::Session;
 use icechunk::{ObjectStorage, Repository, repository::VersionInfo};
 use rand::Rng;
@@ -14,10 +15,12 @@ use std::hint::black_box;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
+
 use zarrs::array::codec::{BloscCodec, BloscCompressionLevel, BloscCompressor, BloscShuffleMode};
 use zarrs::array::{ArrayBuilder, DataType, FillValue};
 use zarrs::array_subset::ArraySubset;
 use zarrs::metadata_ext::data_type::NumpyTimeUnit;
+use zarrs::storage::AsyncReadableStorageTraits;
 use zarrs_icechunk::AsyncIcechunkStore;
 
 mod sentinel2_geometry;
@@ -29,13 +32,14 @@ static ALLOC: dhat::Alloc = dhat::Alloc;
 const SAMPLES_PER_DAY: usize = 10_000;
 const MS_PER_DAY: i64 = 24 * 60 * 60 * 1000; // 86,400,000 milliseconds
 const CHUNK_SIZE: u64 = 1_000_000; // 1M elements per chunk
+const MEGA_BYTE: f64 = 1_048_576.0;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArraysToGenerate {
     Datetime,
     Bbox,
     BboxColumns,
-    All,
+    RtreeIndex,
 }
 
 // This generates:
@@ -46,7 +50,7 @@ pub enum ArraysToGenerate {
 fn generate_icechunk_store(
     rt: &Runtime,
     storage: Arc<ObjectStorage>,
-    arrays: ArraysToGenerate,
+    arrays: &[ArraysToGenerate],
 ) -> Result<Session, Box<dyn std::error::Error>> {
     let _guard = rt.enter();
 
@@ -85,7 +89,7 @@ fn generate_icechunk_store(
     let array_shape = vec![date_data.len() as u64];
     let chunk_shape = vec![CHUNK_SIZE];
 
-    if matches!(arrays, ArraysToGenerate::Datetime | ArraysToGenerate::All) {
+    if arrays.contains(&ArraysToGenerate::Datetime) {
         let date_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
             BloscCodec::new(
                 BloscCompressor::Zstd,
@@ -117,13 +121,13 @@ fn generate_icechunk_store(
         ))?;
     }
 
-    if matches!(arrays, ArraysToGenerate::Bbox) {
+    if arrays.contains(&ArraysToGenerate::Bbox) {
         let bbox_data = generate_wkb_polygons(array_shape[0] as usize);
 
         let bbox_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
             BloscCodec::new(
-                BloscCompressor::Zstd,
-                BloscCompressionLevel::try_from(9).unwrap(),
+                BloscCompressor::LZ4,
+                BloscCompressionLevel::try_from(3).unwrap(),
                 None, // no typesize for variable-length data
                 BloscShuffleMode::NoShuffle,
                 None,
@@ -148,10 +152,7 @@ fn generate_icechunk_store(
         ))?;
     }
 
-    if matches!(
-        arrays,
-        ArraysToGenerate::BboxColumns | ArraysToGenerate::All
-    ) {
+    if arrays.contains(&ArraysToGenerate::BboxColumns) {
         let (xmin, xmax, ymin, ymax) = generate_bbox_columns(array_shape[0] as usize);
 
         let f64_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
@@ -229,6 +230,73 @@ fn generate_icechunk_store(
             &ymax,
         ))?;
     }
+    if arrays.contains(&ArraysToGenerate::RtreeIndex) {
+        let index_group = zarrs::group::GroupBuilder::new().build(store.clone(), "/indexes")?;
+        rt.block_on(index_group.async_store_metadata())?;
+
+        let (xmin, xmax, ymin, ymax) = generate_bbox_columns(array_shape[0] as usize);
+        let start = std::time::Instant::now();
+
+        // Use f32 instead of f64 to reduce index size by ~50%, using f64_box_to_f32
+        // to ensure each f32 box is no smaller than the original f64 box (prevents
+        // false negatives during spatial filtering due to precision loss).
+        let mut rtree_builder = RTreeBuilder::<f32>::new(xmin.len() as u32);
+        for i in 0..xmin.len() {
+            let (min_x, min_y, max_x, max_y) = f64_box_to_f32(xmin[i], ymin[i], xmax[i], ymax[i]);
+            rtree_builder.add(min_x, min_y, max_x, max_y);
+        }
+        let rtree = rtree_builder.finish::<HilbertSort>();
+        let rtree_bytes = rtree.into_inner();
+
+        println!(
+            "Built R-tree index in {:?} - {} items, {} bytes ({:.2} MB)",
+            start.elapsed(),
+            xmin.len(),
+            rtree_bytes.len(),
+            rtree_bytes.len() as f64 / 1_048_576.0
+        );
+
+        let rtree_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
+            BloscCodec::new(
+                BloscCompressor::LZ4,
+                BloscCompressionLevel::try_from(3).unwrap(),
+                None,
+                BloscShuffleMode::NoShuffle,
+                None,
+            )
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?,
+        );
+
+        let rtree_array = ArrayBuilder::new(
+            vec![rtree_bytes.len() as u64],
+            vec![rtree_bytes.len() as u64], // Single chunk
+            DataType::UInt8,
+            FillValue::from(0u8),
+        )
+        .bytes_to_bytes_codecs(vec![rtree_blosc_codec])
+        .build(store.clone(), "/indexes/bbox")?;
+
+        rt.block_on(rtree_array.async_store_metadata())?;
+        rt.block_on(rtree_array.async_store_array_subset_elements(
+            &ArraySubset::new_with_shape(vec![rtree_bytes.len() as u64]),
+            rtree_bytes.as_slice(),
+        ))?;
+
+        // Read back the compressed chunk to show actual storage size
+        let chunk_key = rtree_array.chunk_key(&[0]);
+        let compressed_chunk = rt.block_on(async { store.get(&chunk_key).await })?;
+        if let Some(chunk_bytes) = compressed_chunk {
+            let compression_ratio = rtree_bytes.len() as f64 / chunk_bytes.len() as f64;
+            println!(
+                "R-tree index stored in Zarr at /indexes/bbox - uncompressed: {:.2} MB, compressed: {:.2} MB (ratio: {:.2}x)",
+                rtree_bytes.len() as f64 / 1_048_576.0,
+                chunk_bytes.len() as f64 / 1_048_576.0,
+                compression_ratio
+            );
+        } else {
+            println!("R-tree index stored in Zarr at /indexes/bbox");
+        }
+    }
 
     rt.block_on(async {
         store
@@ -248,7 +316,7 @@ fn generate_icechunk_store(
 
 pub fn generate_icechunk_store_local(
     rt: &Runtime,
-    arrays: ArraysToGenerate,
+    arrays: &[ArraysToGenerate],
 ) -> Result<(Session, TempDir), Box<dyn std::error::Error>> {
     let temp_dir = TempDir::new()?;
     let storage = rt.block_on(ObjectStorage::new_local_filesystem(temp_dir.path()))?;
@@ -260,6 +328,7 @@ pub fn generate_icechunk_store_s3(
     rt: &Runtime,
     bucket: String,
     prefix: String,
+    arrays: &[ArraysToGenerate],
 ) -> Result<Session, Box<dyn std::error::Error>> {
     let storage = rt.block_on(ObjectStorage::new_s3(
         bucket,
@@ -267,7 +336,7 @@ pub fn generate_icechunk_store_s3(
         None, // credentials - uses default AWS credential chain
         None, // config - uses default S3 options
     ))?;
-    let session = generate_icechunk_store(rt, Arc::new(storage), ArraysToGenerate::All)?;
+    let session = generate_icechunk_store(rt, Arc::new(storage), arrays)?;
     Ok(session)
 }
 
@@ -290,8 +359,8 @@ pub fn run_bench(
         b.to_async(rt).iter(|| async {
             let df = ctx.sql(black_box(sql)).await.unwrap();
             let batches = df.collect().await.unwrap();
-            // let row_count: usize = batches.iter().map(|batch| batch.num_rows()).sum();
-            // println!("Query returned {} rows", row_count);
+            let row_count: usize = batches.iter().map(|batch| batch.num_rows()).sum();
+            println!("Query returned {} rows", row_count);
             batches
         });
     });
@@ -321,7 +390,7 @@ pub static DATETIME_SQL: &str = "\
 ";
 
 pub static BBOX_SQL: &str = "\
-    SELECT bbox FROM zarr_data \
+    SELECT date FROM zarr_data \
     WHERE ST_Intersects(bbox, ST_GeomFromText('POLYGON((0 -7, 0 7, 5 7, 5 -7, 0 -7))')) \
 ";
 

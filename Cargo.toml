@@ -10,7 +10,10 @@ arrow-schema = "57.0.0"
 async-trait = "0.1.89"
 datafusion = "52.0"
 futures = "0.3.31"
+geo-index = "0.2"
+geo-traits = "0.3"
 geodatafusion = "0.3"
+wkt = { version = "0.14", default-features = false }
 geoarrow-schema = "0.7.0"
 icechunk = "0.3.16"
 object_store = "0.12.4"
@@ -29,6 +32,7 @@ chrono = "0.4.44"
 criterion = { version = "0.5.1", features = ["async_tokio"] }
 dhat = "0.3"
 geo = "0.31"
+geo-index = "0.2"
 geoarrow-array = "0.7.0"
 rand = "0.8"
 tempfile = "3"
@@ -59,3 +63,10 @@ test = false
 name = "bbox_columns_s3"
 harness = false
 test = false
+
+[[bench]]
+name = "bbox_zarrs_raw"
+harness = false
+test = false
+
+

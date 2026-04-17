@@ -2661,6 +2661,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "geo-index"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e6b2a121e60180a118037426b1e93d7f5904ebd95cf6e841a575195a65a31ce"
+dependencies = [
+ "bytemuck",
+ "float_next_after",
+ "geo-traits 0.2.0",
+ "num-traits",
+ "thiserror 1.0.69",
+ "tinyvec",
+]
+
+[[package]]
+name = "geo-traits"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b018fc19fa58202b03f1c809aebe654f7d70fd3887dace34c3d05c11aeb474b5"
+dependencies = [
+ "geo-types",
+]
+
+[[package]]
 name = "geo-traits"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2691,7 +2714,7 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-schema",
- "geo-traits",
+ "geo-traits 0.3.0",
  "geoarrow-schema",
  "num-traits",
  "wkb",
@@ -2707,7 +2730,7 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "geo",
- "geo-traits",
+ "geo-traits 0.3.0",
  "geoarrow-array",
  "geoarrow-schema",
 ]
@@ -2719,7 +2742,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e97be4e9f523f92bd6a0e0458323f4b783d073d011664decd8dbf05651704f34"
 dependencies = [
  "arrow-schema",
- "geo-traits",
+ "geo-traits 0.3.0",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -2736,7 +2759,7 @@ dependencies = [
  "arrow-schema",
  "datafusion",
  "geo",
- "geo-traits",
+ "geo-traits 0.3.0",
  "geoarrow-array",
  "geoarrow-expr-geo",
  "geoarrow-schema",
@@ -6390,7 +6413,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a120b336c7ad17749026d50427c23d838ecb50cd64aaea6254b5030152f890a9"
 dependencies = [
  "byteorder",
- "geo-traits",
+ "geo-traits 0.3.0",
  "num_enum",
  "thiserror 1.0.69",
 ]
@@ -6401,7 +6424,7 @@ version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "efb2b923ccc882312e559ffaa832a055ba9d1ac0cc8e86b3e25453247e4b81d7"
 dependencies = [
- "geo-traits",
+ "geo-traits 0.3.0",
  "geo-types",
  "log",
  "num-traits",
@@ -6458,6 +6481,8 @@ dependencies = [
  "dhat",
  "futures",
  "geo",
+ "geo-index",
+ "geo-traits 0.3.0",
  "geoarrow-array",
  "geoarrow-schema",
  "geodatafusion",
@@ -6468,6 +6493,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "wkb",
+ "wkt",
  "zarrs",
  "zarrs_filesystem",
  "zarrs_icechunk",
