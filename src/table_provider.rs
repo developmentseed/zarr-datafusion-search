@@ -25,6 +25,8 @@ use datafusion::physical_plan::{
 };
 use datafusion::prelude::SessionContext;
 use futures::TryStreamExt;
+use geo_index::rtree::RTreeRef;
+use geo_traits::{CoordTrait, PolygonTrait};
 use object_store::ObjectStore;
 #[cfg(test)]
 use object_store::local::LocalFileSystem;
@@ -32,9 +34,11 @@ use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Debug};
 use std::ops::Range;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 use tokio::sync::Semaphore;
+use wkt::Wkt;
 use zarrs::array::Array;
 use zarrs::array_subset::ArraySubset;
 use zarrs::group::Group;
@@ -43,7 +47,7 @@ use zarrs_icechunk::AsyncIcechunkStore;
 
 use crate::error::{ZarrDataFusionError, ZarrDataFusionResult};
 use crate::schema::group_arrays_schema_async;
-use geo_index::rtree::RTreeIndex;
+use geo_index::rtree::{RTreeIndex, util::f64_box_to_f32};
 
 /// Maps chunk indices to row indices within those chunks
 type ChunkRowMap = HashMap<Vec<u64>, Vec<u64>>;
@@ -405,31 +409,33 @@ fn st_intersects_query_index(
     indexes: &HashMap<String, Vec<u8>>,
     arrays: &HashMap<String, Array<Arc<dyn AsyncReadableListableStorageTraits>>>,
     chunk_grid_shape: &[u64],
-) -> Option<SpatialIndexResult> {
-    use geo_index::rtree::RTreeRef;
-
+) -> ZarrDataFusionResult<Option<SpatialIndexResult>> {
     // Look for ST_Intersects(column, ST_GeomFromText('POLYGON(...)'))
     for (filter_idx, filter) in filters.iter().enumerate() {
         if let Some((array_name, bbox)) = extract_st_intersects_bbox(filter) {
             // Check if we have an R-tree index for this array
             if let Some(index_bytes) = indexes.get(&array_name) {
-                // Query the R-tree
-                if let Ok(rtree) = RTreeRef::<f32>::try_new(index_bytes) {
-                    let (minx, miny, maxx, maxy) = bbox;
-                    let matching_indices = rtree.search(minx, miny, maxx, maxy);
+                // Query the R-tree — error here means the stored index is corrupt or wrong type
+                let rtree = RTreeRef::<f32>::try_new(index_bytes).map_err(|e| {
+                    ZarrDataFusionError::Custom(format!(
+                        "Failed to read spatial index for '{}': {}",
+                        array_name, e
+                    ))
+                })?;
+                let (minx, miny, maxx, maxy) = bbox;
+                let matching_indices = rtree.search(minx, miny, maxx, maxy);
 
-                    // Group row indices by chunk
-                    if let Some(array) = arrays.get(&array_name) {
-                        let chunk_map =
-                            group_row_indices_by_chunk(&matching_indices, array, chunk_grid_shape);
-                        return Some((chunk_map, filter_idx));
-                    }
+                // Group row indices by chunk
+                if let Some(array) = arrays.get(&array_name) {
+                    let chunk_map =
+                        group_row_indices_by_chunk(&matching_indices, array, chunk_grid_shape);
+                    return Ok(Some((chunk_map, filter_idx)));
                 }
             }
         }
     }
 
-    None // No spatial filter found or index unavailable
+    Ok(None) // No spatial filter found or index unavailable
 }
 
 /// Extract (array_name, (minx, miny, maxx, maxy)) from ST_Intersects filter
@@ -481,22 +487,22 @@ fn compute_bbox_from_coords(
     x_arr: &arrow::array::PrimitiveArray<arrow::datatypes::Float64Type>,
     y_arr: &arrow::array::PrimitiveArray<arrow::datatypes::Float64Type>,
 ) -> Option<(f32, f32, f32, f32)> {
-    let mut minx = f32::MAX;
-    let mut miny = f32::MAX;
-    let mut maxx = f32::MIN;
-    let mut maxy = f32::MIN;
+    let mut minx = f64::MAX;
+    let mut miny = f64::MAX;
+    let mut maxx = f64::MIN;
+    let mut maxy = f64::MIN;
 
     for i in 0..x_arr.len() {
-        let x = x_arr.value(i) as f32;
-        let y = y_arr.value(i) as f32;
+        let x = x_arr.value(i);
+        let y = y_arr.value(i);
         minx = minx.min(x);
         maxx = maxx.max(x);
         miny = miny.min(y);
         maxy = maxy.max(y);
     }
 
-    if minx != f32::MAX {
-        Some((minx, miny, maxx, maxy))
+    if minx != f64::MAX {
+        Some(f64_box_to_f32(minx, miny, maxx, maxy))
     } else {
         None
     }
@@ -547,29 +553,29 @@ fn extract_bbox_from_geoarrow_literal(
 /// Parse bounding box from WKT POLYGON string
 ///
 /// Example: "POLYGON((0 -7, 0 7, 5 7, 5 -7, 0 -7))" -> (0.0, -7.0, 5.0, 7.0)
-fn parse_polygon_bbox(wkt: &str) -> Option<(f32, f32, f32, f32)> {
-    // Simple parser for POLYGON((x1 y1, x2 y2, ...))
-    let coords_str = wkt.strip_prefix("POLYGON((")?.strip_suffix("))")?;
+fn parse_polygon_bbox(wkt_str: &str) -> Option<(f32, f32, f32, f32)> {
+    let wkt = Wkt::from_str(wkt_str).ok()?;
+    let polygon = match wkt {
+        Wkt::Polygon(p) => p,
+        _ => return None,
+    };
 
-    let mut minx = f32::MAX;
-    let mut miny = f32::MAX;
-    let mut maxx = f32::MIN;
-    let mut maxy = f32::MIN;
+    let mut minx = f64::MAX;
+    let mut miny = f64::MAX;
+    let mut maxx = f64::MIN;
+    let mut maxy = f64::MIN;
 
-    for point in coords_str.split(',') {
-        let coords: Vec<&str> = point.split_whitespace().collect();
-        if coords.len() >= 2
-            && let (Ok(x), Ok(y)) = (coords[0].parse::<f32>(), coords[1].parse::<f32>())
-        {
-            minx = minx.min(x);
-            maxx = maxx.max(x);
-            miny = miny.min(y);
-            maxy = maxy.max(y);
+    for ring in polygon.exterior().into_iter().chain(polygon.interiors()) {
+        for coord in ring.coords() {
+            minx = minx.min(coord.x());
+            maxx = maxx.max(coord.x());
+            miny = miny.min(coord.y());
+            maxy = maxy.max(coord.y());
         }
     }
 
-    if minx != f32::MAX {
-        Some((minx, miny, maxx, maxy))
+    if minx != f64::MAX {
+        Some(f64_box_to_f32(minx, miny, maxx, maxy))
     } else {
         None
     }
@@ -649,7 +655,7 @@ async fn scan_chunks_async(
 
     // Try to use spatial index to filter chunks
     let spatial_index_result =
-        st_intersects_query_index(&filters, &rtree_indexes, &arrays, chunk_grid_shape);
+        st_intersects_query_index(&filters, &rtree_indexes, &arrays, chunk_grid_shape)?;
 
     // If spatial index was used, remove that filter from evaluation (skip WKB decode!)
     let (filters_to_evaluate, filter_col_names_to_load) =
@@ -1394,5 +1400,64 @@ mod tests {
         let batches = df.collect().await.unwrap();
         assert!(!batches.is_empty());
         assert!(batches[0].num_rows() > 0);
+    }
+
+    #[tokio::test]
+    async fn test_corrupt_spatial_index_returns_error() {
+        use zarrs::array::{ArrayBuilder, DataType, FillValue};
+        use zarrs::array_subset::ArraySubset;
+
+        // Build a store with normal data but no geoindex, then write garbage bytes
+        // where the rtree index would be.
+        let wrapper = get_local_zarr_store(false).await;
+        let store = wrapper.get_store();
+
+        let index_group = zarrs::group::GroupBuilder::new()
+            .build(store.clone(), "/indexes")
+            .unwrap();
+        index_group.async_store_metadata().await.unwrap();
+
+        let garbage: Vec<u8> = b"this is not a valid rtree index".to_vec();
+        let index_array = ArrayBuilder::new(
+            vec![garbage.len() as u64],
+            vec![garbage.len() as u64],
+            DataType::UInt8,
+            FillValue::from(0u8),
+        )
+        .build(store.clone(), "/indexes/bbox")
+        .unwrap();
+        index_array.async_store_metadata().await.unwrap();
+        index_array
+            .async_store_array_subset_elements(
+                &ArraySubset::new_with_shape(vec![garbage.len() as u64]),
+                garbage.as_slice(),
+            )
+            .await
+            .unwrap();
+
+        let path = wrapper.get_store_path();
+        let ctx = SessionContext::new();
+        register_spatial_functions(&ctx).expect("Failed to register spatial functions");
+        let local_fs = LocalFileSystem::new_with_prefix(path).unwrap();
+        let provider = ZarrTableProvider::new_object_store(local_fs, "/meta")
+            .await
+            .unwrap();
+        ctx.register_table("zarr_data", Arc::new(provider))
+            .expect("Failed to register table");
+
+        let sql = "
+            SELECT collection FROM zarr_data
+            WHERE ST_Intersects(bbox, ST_GeomFromText('POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))'))
+        ";
+        let result = ctx.sql(sql).await.unwrap().collect().await;
+        assert!(
+            result.is_err(),
+            "expected an error from corrupt spatial index"
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Failed to read spatial index"),
+            "unexpected error message: {err_msg}"
+        );
     }
 }

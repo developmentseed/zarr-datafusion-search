@@ -39,7 +39,6 @@ fn bbox_bench_s3(c: &mut Criterion) {
     );
 
     let ctx = SessionContext::new();
-    geodatafusion::register(&ctx);
     ctx.register_table("zarr_data", table_provider).unwrap();
     run_bench(c, &rt, &ctx, "bbox_bench_s3", "bbox_bench_s3", BBOX_SQL);
 }
