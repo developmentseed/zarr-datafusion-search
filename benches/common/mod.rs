@@ -8,8 +8,8 @@ use criterion::{Criterion, SamplingMode};
 use datafusion::prelude::SessionContext;
 use geo_index::rtree::{RTreeBuilder, sort::HilbertSort, util::f64_box_to_f32};
 use icechunk::session::Session;
+use icechunk::storage::{RetriesSettings, Settings};
 use icechunk::{ObjectStorage, Repository, RepositoryConfig, repository::VersionInfo};
-use icechunk::storage::{ Settings, RetriesSettings};
 
 use rand::Rng;
 use std::collections::HashMap;
@@ -48,14 +48,13 @@ pub enum ArraysToGenerate {
 // - 5,479 days (2010-01-01 to 2025-01-01, approximately 15 years)
 // - 10,000 random timestamps per day
 // - Total: 54,790,000 datetime64[ms] values
-// - Chunks: 1,000,000 elements per chunk (approximately 10MB per chunk)
 fn generate_icechunk_store(
     rt: &Runtime,
     storage: Arc<ObjectStorage>,
     arrays: &[ArraysToGenerate],
 ) -> Result<Session, Box<dyn std::error::Error>> {
     let _guard = rt.enter();
-    
+
     let settings = Settings {
         concurrency: None,
         retries: Some(RetriesSettings {
