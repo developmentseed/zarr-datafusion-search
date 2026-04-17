@@ -1401,4 +1401,63 @@ mod tests {
         assert!(!batches.is_empty());
         assert!(batches[0].num_rows() > 0);
     }
+
+    #[tokio::test]
+    async fn test_corrupt_spatial_index_returns_error() {
+        use zarrs::array::{ArrayBuilder, DataType, FillValue};
+        use zarrs::array_subset::ArraySubset;
+
+        // Build a store with normal data but no geoindex, then write garbage bytes
+        // where the rtree index would be.
+        let wrapper = get_local_zarr_store(false).await;
+        let store = wrapper.get_store();
+
+        let index_group = zarrs::group::GroupBuilder::new()
+            .build(store.clone(), "/indexes")
+            .unwrap();
+        index_group.async_store_metadata().await.unwrap();
+
+        let garbage: Vec<u8> = b"this is not a valid rtree index".to_vec();
+        let index_array = ArrayBuilder::new(
+            vec![garbage.len() as u64],
+            vec![garbage.len() as u64],
+            DataType::UInt8,
+            FillValue::from(0u8),
+        )
+        .build(store.clone(), "/indexes/bbox")
+        .unwrap();
+        index_array.async_store_metadata().await.unwrap();
+        index_array
+            .async_store_array_subset_elements(
+                &ArraySubset::new_with_shape(vec![garbage.len() as u64]),
+                garbage.as_slice(),
+            )
+            .await
+            .unwrap();
+
+        let path = wrapper.get_store_path();
+        let ctx = SessionContext::new();
+        register_spatial_functions(&ctx).expect("Failed to register spatial functions");
+        let local_fs = LocalFileSystem::new_with_prefix(path).unwrap();
+        let provider = ZarrTableProvider::new_object_store(local_fs, "/meta")
+            .await
+            .unwrap();
+        ctx.register_table("zarr_data", Arc::new(provider))
+            .expect("Failed to register table");
+
+        let sql = "
+            SELECT collection FROM zarr_data
+            WHERE ST_Intersects(bbox, ST_GeomFromText('POLYGON((0 0, 0 5, 5 5, 5 0, 0 0))'))
+        ";
+        let result = ctx.sql(sql).await.unwrap().collect().await;
+        assert!(
+            result.is_err(),
+            "expected an error from corrupt spatial index"
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Failed to read spatial index"),
+            "unexpected error message: {err_msg}"
+        );
+    }
 }
