@@ -26,6 +26,7 @@ use datafusion::physical_plan::{
 use datafusion::prelude::SessionContext;
 use futures::TryStreamExt;
 use geo_index::rtree::RTreeRef;
+use geo_traits::{CoordTrait, PolygonTrait};
 use object_store::ObjectStore;
 #[cfg(test)]
 use object_store::local::LocalFileSystem;
@@ -33,9 +34,11 @@ use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Debug};
 use std::ops::Range;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::runtime::Handle;
 use tokio::sync::Semaphore;
+use wkt::Wkt;
 use zarrs::array::Array;
 use zarrs::array_subset::ArraySubset;
 use zarrs::group::Group;
@@ -406,29 +409,33 @@ fn st_intersects_query_index(
     indexes: &HashMap<String, Vec<u8>>,
     arrays: &HashMap<String, Array<Arc<dyn AsyncReadableListableStorageTraits>>>,
     chunk_grid_shape: &[u64],
-) -> Option<SpatialIndexResult> {
+) -> ZarrDataFusionResult<Option<SpatialIndexResult>> {
     // Look for ST_Intersects(column, ST_GeomFromText('POLYGON(...)'))
     for (filter_idx, filter) in filters.iter().enumerate() {
         if let Some((array_name, bbox)) = extract_st_intersects_bbox(filter) {
             // Check if we have an R-tree index for this array
             if let Some(index_bytes) = indexes.get(&array_name) {
-                // Query the R-tree
-                if let Ok(rtree) = RTreeRef::<f32>::try_new(index_bytes) {
-                    let (minx, miny, maxx, maxy) = bbox;
-                    let matching_indices = rtree.search(minx, miny, maxx, maxy);
+                // Query the R-tree — error here means the stored index is corrupt or wrong type
+                let rtree = RTreeRef::<f32>::try_new(index_bytes).map_err(|e| {
+                    ZarrDataFusionError::Custom(format!(
+                        "Failed to read spatial index for '{}': {}",
+                        array_name, e
+                    ))
+                })?;
+                let (minx, miny, maxx, maxy) = bbox;
+                let matching_indices = rtree.search(minx, miny, maxx, maxy);
 
-                    // Group row indices by chunk
-                    if let Some(array) = arrays.get(&array_name) {
-                        let chunk_map =
-                            group_row_indices_by_chunk(&matching_indices, array, chunk_grid_shape);
-                        return Some((chunk_map, filter_idx));
-                    }
+                // Group row indices by chunk
+                if let Some(array) = arrays.get(&array_name) {
+                    let chunk_map =
+                        group_row_indices_by_chunk(&matching_indices, array, chunk_grid_shape);
+                    return Ok(Some((chunk_map, filter_idx)));
                 }
             }
         }
     }
 
-    None // No spatial filter found or index unavailable
+    Ok(None) // No spatial filter found or index unavailable
 }
 
 /// Extract (array_name, (minx, miny, maxx, maxy)) from ST_Intersects filter
@@ -546,24 +553,24 @@ fn extract_bbox_from_geoarrow_literal(
 /// Parse bounding box from WKT POLYGON string
 ///
 /// Example: "POLYGON((0 -7, 0 7, 5 7, 5 -7, 0 -7))" -> (0.0, -7.0, 5.0, 7.0)
-fn parse_polygon_bbox(wkt: &str) -> Option<(f32, f32, f32, f32)> {
-    // Simple parser for POLYGON((x1 y1, x2 y2, ...))
-    let coords_str = wkt.strip_prefix("POLYGON((")?.strip_suffix("))")?;
+fn parse_polygon_bbox(wkt_str: &str) -> Option<(f32, f32, f32, f32)> {
+    let wkt = Wkt::from_str(wkt_str).ok()?;
+    let polygon = match wkt {
+        Wkt::Polygon(p) => p,
+        _ => return None,
+    };
 
     let mut minx = f64::MAX;
     let mut miny = f64::MAX;
     let mut maxx = f64::MIN;
     let mut maxy = f64::MIN;
 
-    for point in coords_str.split(',') {
-        let coords: Vec<&str> = point.split_whitespace().collect();
-        if coords.len() >= 2
-            && let (Ok(x), Ok(y)) = (coords[0].parse::<f64>(), coords[1].parse::<f64>())
-        {
-            minx = minx.min(x);
-            maxx = maxx.max(x);
-            miny = miny.min(y);
-            maxy = maxy.max(y);
+    for ring in polygon.exterior().into_iter().chain(polygon.interiors()) {
+        for coord in ring.coords() {
+            minx = minx.min(coord.x());
+            maxx = maxx.max(coord.x());
+            miny = miny.min(coord.y());
+            maxy = maxy.max(coord.y());
         }
     }
 
@@ -648,7 +655,7 @@ async fn scan_chunks_async(
 
     // Try to use spatial index to filter chunks
     let spatial_index_result =
-        st_intersects_query_index(&filters, &rtree_indexes, &arrays, chunk_grid_shape);
+        st_intersects_query_index(&filters, &rtree_indexes, &arrays, chunk_grid_shape)?;
 
     // If spatial index was used, remove that filter from evaluation (skip WKB decode!)
     let (filters_to_evaluate, filter_col_names_to_load) =
