@@ -8,7 +8,9 @@ use criterion::{Criterion, SamplingMode};
 use datafusion::prelude::SessionContext;
 use geo_index::rtree::{RTreeBuilder, sort::HilbertSort, util::f64_box_to_f32};
 use icechunk::session::Session;
-use icechunk::{ObjectStorage, Repository, repository::VersionInfo};
+use icechunk::storage::{RetriesSettings, Settings};
+use icechunk::{ObjectStorage, Repository, RepositoryConfig, repository::VersionInfo};
+
 use rand::Rng;
 use std::collections::HashMap;
 use std::hint::black_box;
@@ -31,7 +33,7 @@ static ALLOC: dhat::Alloc = dhat::Alloc;
 
 const SAMPLES_PER_DAY: usize = 10_000;
 const MS_PER_DAY: i64 = 24 * 60 * 60 * 1000; // 86,400,000 milliseconds
-const CHUNK_SIZE: u64 = 1_000_000; // 1M elements per chunk
+const CHUNK_SIZE: u64 = 200_000;
 const MEGA_BYTE: f64 = 1_048_576.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,7 +48,6 @@ pub enum ArraysToGenerate {
 // - 5,479 days (2010-01-01 to 2025-01-01, approximately 15 years)
 // - 10,000 random timestamps per day
 // - Total: 54,790,000 datetime64[ms] values
-// - Chunks: 1,000,000 elements per chunk (approximately 10MB per chunk)
 fn generate_icechunk_store(
     rt: &Runtime,
     storage: Arc<ObjectStorage>,
@@ -54,7 +55,26 @@ fn generate_icechunk_store(
 ) -> Result<Session, Box<dyn std::error::Error>> {
     let _guard = rt.enter();
 
-    let repo = rt.block_on(Repository::create(None, storage, HashMap::new()))?;
+    let settings = Settings {
+        concurrency: None,
+        retries: Some(RetriesSettings {
+            max_tries: std::num::NonZero::new(20),
+            ..Default::default()
+        }),
+        storage_class: None,
+        metadata_storage_class: None,
+        chunks_storage_class: None,
+        minimum_size_for_multipart_upload: Some(100 * 1024 * 1024), // 100 MB
+        unsafe_use_conditional_update: Some(false),
+        unsafe_use_conditional_create: None,
+        unsafe_use_metadata: None,
+    };
+
+    let config = RepositoryConfig {
+        storage: Some(settings),
+        ..Default::default()
+    };
+    let repo = rt.block_on(Repository::create(Some(config), storage, HashMap::new()))?;
     let session = rt.block_on(repo.writable_session("main")).unwrap();
     let store = Arc::new(AsyncIcechunkStore::new(session.clone()));
 
@@ -282,7 +302,6 @@ fn generate_icechunk_store(
             rtree_bytes.as_slice(),
         ))?;
 
-        // Read back the compressed chunk to show actual storage size
         let chunk_key = rtree_array.chunk_key(&[0]);
         let compressed_chunk = rt.block_on(async { store.get(&chunk_key).await })?;
         if let Some(chunk_bytes) = compressed_chunk {
