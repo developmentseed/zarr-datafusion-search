@@ -23,9 +23,6 @@ jobs:
             target: x86_64
             manylinux: "2_28"
           - runner: ubuntu-latest
-            target: x86
-            manylinux: "2_28"
-          - runner: ubuntu-latest
             target: aarch64
             manylinux: "2_28"
     steps:
@@ -60,8 +57,6 @@ jobs:
         platform:
           - runner: ubuntu-latest
             target: x86_64
-          - runner: ubuntu-latest
-            target: x86
     steps:
       - uses: actions/checkout@v4
 
