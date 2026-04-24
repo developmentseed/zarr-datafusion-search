@@ -156,6 +156,9 @@ venv.bak/
 # mkdocs documentation
 /site
 
+# Superpowers AI planning docs
+docs/superpowers/
+
 # mypy
 .mypy_cache/
 .dmypy.json
