@@ -3,7 +3,7 @@ name = "zarr-datafusion-search-examples"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "affine>=2.4.0",
     "boto3>=1.40.61",
@@ -24,11 +24,11 @@ dependencies = [
     "geoindex-rs>=0.2.1",
     "shapely>=2.1.2",
     "virtual-tiff>=0.2.0",
-    "virtualizarr>=2.4.0",
+    "virtualizarr==2.5.0",
     "xarray>=2025.10.1",
     "zarr-datafusion-search",
 ]
 
 [tool.uv.sources]
-zarr-datafusion-search = { workspace = true }
+zarr-datafusion-search = { path = "../python", editable = true }
 
