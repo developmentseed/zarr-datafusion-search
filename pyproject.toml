@@ -13,3 +13,7 @@ dependencies = [
 
 [dependency-groups]
 dev = ["ipykernel>=6.30.1"]
+docs = [
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.29",
+]
