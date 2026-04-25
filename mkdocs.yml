@@ -69,8 +69,26 @@ theme:
 extra_css:
   - overrides/stylesheets/extra.css
 
+watch:
+  - python/python
+
 plugins:
   - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [python/python]
+          options:
+            allow_inspection: false
+            docstring_style: google
+            docstring_section_style: list
+            line_length: 80
+            separate_signature: true
+            show_root_heading: true
+            show_signature_annotations: true
+            show_source: false
+            show_symbol_type_toc: true
+            signature_crossrefs: true
 
 markdown_extensions:
   - admonition
