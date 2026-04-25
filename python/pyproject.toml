@@ -23,7 +23,7 @@ python-source = "python"
 
 [tool.uv]
 dev-dependencies = [
-    "icechunk>=1.1.20; python_version >= '3.11'",
+    "icechunk==1.1.21; python_version >= '3.11'",
     "ipykernel",
     "maturin",
     "obstore",
