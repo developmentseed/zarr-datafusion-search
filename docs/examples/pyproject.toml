@@ -1,7 +1,7 @@
 [project]
 name = "zarr-datafusion-search-examples"
 version = "0.1.0"
-description = "Add your description here"
+description = "Notebook examples for Zarr Datafusion Search"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -9,7 +9,7 @@ dependencies = [
     "boto3>=1.40.61",
     "dask>=2025.11.0",
     "earthaccess>=0.15.1",
-    "icechunk==1.1.20",
+    "icechunk==1.1.21",
     "folium>=0.20.0",
     "matplotlib>=3.10.7",
     "morecantile>=6.2.0",
@@ -30,5 +30,5 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-zarr-datafusion-search = { path = "../python", editable = true }
+zarr-datafusion-search = { path = "../../python", editable = true }
 
