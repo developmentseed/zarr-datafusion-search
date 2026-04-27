@@ -12,7 +12,7 @@ _metadata_ in a Zarr store.  The most compelling cases are
 - **Heterogeneous Arrays** - With the advent of Virtualizarr we are often representing chunks from source files that we don't control.  For Level 2 and Level 3 datasets like Sentinel 2 this means that virtual Zarr arrays have varying `dtypes`, `codecs` and `crs` values.
 If the source arrays are heterogeneous, they cannot be concatenated along a dimension to form a single datacube.  Because of this we need an alternative to select or discover these arrays other than the normal coordinate or dimensional slicing we use with datacubes.
 
-- **Synchornization** - Our current metadata management solutions (STAC, CMR, ODC) all use disconnected metadata stores which reference raw data assets in object storage.
+- **Synchronization** - Our current metadata management solutions (STAC, CMR, ODC) all use disconnected metadata stores which reference raw data assets in object storage.
 This can present problems as systems require complex, fragile orchestration to maintain consistency between metadata indexes and source data.  Using Icechunk as store can alleviate this as array data and metadata updates can be completed in a single atomic transaction.
 
 ## Schema

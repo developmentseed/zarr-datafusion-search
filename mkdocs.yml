@@ -23,6 +23,10 @@ nav:
       - user-guide/quickstart.md
   - API Reference:
       - api/zarr-table.md
+  - Examples:
+      - examples/quickstart.ipynb
+      - examples/spatial_index.ipynb
+      - examples/landsat_virtualizarr.ipynb
   - Architecture:
       - architecture/zarr.md
       - architecture/query-pipeline.md
@@ -74,6 +78,8 @@ watch:
 
 plugins:
   - search
+  - mkdocs-jupyter:
+      execute: false
   - mkdocstrings:
       handlers:
         python:
