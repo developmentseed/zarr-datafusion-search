@@ -1,0 +1,34 @@
+[project]
+name = "zarr-datafusion-search-examples"
+version = "0.1.0"
+description = "Notebook examples for Zarr Datafusion Search"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "affine>=2.4.0",
+    "boto3>=1.40.61",
+    "dask>=2025.11.0",
+    "earthaccess>=0.15.1",
+    "icechunk==1.1.21",
+    "folium>=0.20.0",
+    "matplotlib>=3.10.7",
+    "morecantile>=6.2.0",
+    "obspec-utils>=0.9.0",
+    "obstore>=0.6.0",
+    "pyresample>=1.34.2",
+    "pystac>=1.14.1",
+    "pystac-client>=0.9.0",
+    "rasterio>=1.4.3",
+    "rasterix>=0.1a4",
+    "rich>=14.2.0",
+    "geoindex-rs>=0.2.1",
+    "shapely>=2.1.2",
+    "virtual-tiff>=0.2.0",
+    "virtualizarr==2.5.0",
+    "xarray>=2025.10.1",
+    "zarr-datafusion-search",
+]
+
+[tool.uv.sources]
+zarr-datafusion-search = { path = "../../python", editable = true }
+
