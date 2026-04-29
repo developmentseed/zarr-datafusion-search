@@ -44,7 +44,9 @@ bbox[:] = shapely.to_wkb([
     shapely.box( 30.0,  30.0, 50.0, 50.0),
 ])
 ```
-
+Note that the chunk size and shape must be the same for all of our `meta` arrays.  See
+[zarr structure](../architecture/zarr.md) for more details on why.   
+:
 ## 2. Register the store
 
 Use `ZarrTable.from_obstore` to open the store through

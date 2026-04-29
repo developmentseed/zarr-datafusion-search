@@ -21,4 +21,5 @@ This can present problems as systems require complex, fragile orchestration to m
 
 - **[User Guide](user-guide/installation.md)** — Installation, quickstart
 - **[API Reference](api/zarr-table.md)** — `ZarrTable` class documentation
+- **[Examples](examples/README.md)** - Notebook examples
 - **[Developer Docs](DEVELOP.md)** — Contributing and running benchmarks
