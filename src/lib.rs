@@ -8,6 +8,7 @@ use zarrs_storage as _;
 
 pub mod error;
 pub mod schema;
+pub mod ingest;
 pub mod table_provider;
 #[cfg(test)]
 pub mod testing;
