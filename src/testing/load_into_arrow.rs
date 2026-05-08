@@ -31,16 +31,12 @@ async fn test_load_zarrs_into_arrow_record_batch() {
         // Load date array (datetime64[ms])
         let date_array = Array::open(store.clone(), "/meta/date").unwrap();
         let date_subset = ArraySubset::new_with_shape(date_array.shape().to_vec());
-        let date_data: Vec<i64> = date_array
-            .retrieve_array_subset(&date_subset)
-            .unwrap();
+        let date_data: Vec<i64> = date_array.retrieve_array_subset(&date_subset).unwrap();
 
         // Load bbox array (binary data representing WKB geometries)
         let bbox_array = Array::open(store.clone(), "/meta/bbox").unwrap();
         let bbox_subset = ArraySubset::new_with_shape(bbox_array.shape().to_vec());
-        let bbox_data: Vec<Vec<u8>> = bbox_array
-            .retrieve_array_subset(&bbox_subset)
-            .unwrap();
+        let bbox_data: Vec<Vec<u8>> = bbox_array.retrieve_array_subset(&bbox_subset).unwrap();
 
         // Create Arrow arrays from the loaded data
         let collection_arrow: ArrayRef = Arc::new(StringArray::from(collection_data.clone()));

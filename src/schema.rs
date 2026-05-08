@@ -4,13 +4,12 @@ use arrow_schema::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit};
 use geoarrow_schema::{Crs, WkbType};
 use std::sync::Arc;
 use zarrs::array::Array;
-use zarrs::array::data_type::{
-    BoolDataType, BytesDataType, Float16DataType, Float32DataType, Float64DataType,
-    Int8DataType, Int16DataType, Int32DataType, Int64DataType, NumpyDateTime64DataType,
-    NumpyTimeUnit, RawBitsDataType, StringDataType, UInt8DataType, UInt16DataType,
-    UInt32DataType, UInt64DataType,
-};
 use zarrs::array::DataType as ZarrDataType;
+use zarrs::array::data_type::{
+    BoolDataType, BytesDataType, Float16DataType, Float32DataType, Float64DataType, Int8DataType,
+    Int16DataType, Int32DataType, Int64DataType, NumpyDateTime64DataType, NumpyTimeUnit,
+    RawBitsDataType, StringDataType, UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType,
+};
 use zarrs::group::Group;
 use zarrs::node::NodePath;
 use zarrs::storage::{AsyncReadableListableStorageTraits, ReadableListableStorageTraits};
@@ -100,9 +99,7 @@ fn zarr_to_arrow_field(name: String, zarr_dtype: &ZarrDataType) -> ZarrDataFusio
         DataType::Float32
     } else if zarr_dtype.is::<Float64DataType>() {
         DataType::Float64
-    } else if zarr_dtype.is::<RawBitsDataType>() {
-        DataType::BinaryView
-    } else if zarr_dtype.is::<BytesDataType>() {
+    } else if zarr_dtype.is::<RawBitsDataType>() || zarr_dtype.is::<BytesDataType>() {
         DataType::BinaryView
     } else if zarr_dtype.is::<StringDataType>() {
         DataType::Utf8View

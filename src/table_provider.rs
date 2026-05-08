@@ -152,9 +152,7 @@ impl ZarrTableProvider {
         let index_array = Array::async_open(store, index_path).await?;
         let array_shape = index_array.shape();
         let rtree_bytes: Vec<u8> = index_array
-            .async_retrieve_array_subset(&ArraySubset::new_with_shape(
-                array_shape.to_vec(),
-            ))
+            .async_retrieve_array_subset(&ArraySubset::new_with_shape(array_shape.to_vec()))
             .await?;
         Ok(rtree_bytes)
     }
@@ -1403,8 +1401,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_corrupt_spatial_index_returns_error() {
-        use zarrs::array::{ArrayBuilder, ArraySubset, FillValue};
         use zarrs::array::data_type;
+        use zarrs::array::{ArrayBuilder, ArraySubset, FillValue};
 
         // Build a store with normal data but no geoindex, then write garbage bytes
         // where the rtree index would be.

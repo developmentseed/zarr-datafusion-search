@@ -19,8 +19,8 @@ use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
 use zarrs::array::codec::{BloscCodec, BloscCompressionLevel, BloscCompressor, BloscShuffleMode};
-use zarrs::array::{ArrayBuilder, ArraySubset, BytesToBytesCodecTraits, FillValue};
 use zarrs::array::data_type::{self, NumpyTimeUnit};
+use zarrs::array::{ArrayBuilder, ArraySubset, BytesToBytesCodecTraits, FillValue};
 use zarrs::storage::AsyncReadableStorageTraits;
 use zarrs_icechunk::AsyncIcechunkStore;
 
@@ -193,10 +193,10 @@ fn generate_icechunk_store(
         .build(store.clone(), "/meta/xmin")?;
 
         rt.block_on(xmin_array.async_store_metadata())?;
-        rt.block_on(xmin_array.async_store_array_subset(
-            &ArraySubset::new_with_shape(array_shape.clone()),
-            &xmin,
-        ))?;
+        rt.block_on(
+            xmin_array
+                .async_store_array_subset(&ArraySubset::new_with_shape(array_shape.clone()), &xmin),
+        )?;
 
         // Create and store xmax array
         let xmax_array = ArrayBuilder::new(
@@ -209,10 +209,10 @@ fn generate_icechunk_store(
         .build(store.clone(), "/meta/xmax")?;
 
         rt.block_on(xmax_array.async_store_metadata())?;
-        rt.block_on(xmax_array.async_store_array_subset(
-            &ArraySubset::new_with_shape(array_shape.clone()),
-            &xmax,
-        ))?;
+        rt.block_on(
+            xmax_array
+                .async_store_array_subset(&ArraySubset::new_with_shape(array_shape.clone()), &xmax),
+        )?;
 
         // Create and store ymin array
         let ymin_array = ArrayBuilder::new(
@@ -225,10 +225,10 @@ fn generate_icechunk_store(
         .build(store.clone(), "/meta/ymin")?;
 
         rt.block_on(ymin_array.async_store_metadata())?;
-        rt.block_on(ymin_array.async_store_array_subset(
-            &ArraySubset::new_with_shape(array_shape.clone()),
-            &ymin,
-        ))?;
+        rt.block_on(
+            ymin_array
+                .async_store_array_subset(&ArraySubset::new_with_shape(array_shape.clone()), &ymin),
+        )?;
 
         // Create and store ymax array
         let ymax_array = ArrayBuilder::new(
@@ -241,10 +241,10 @@ fn generate_icechunk_store(
         .build(store.clone(), "/meta/ymax")?;
 
         rt.block_on(ymax_array.async_store_metadata())?;
-        rt.block_on(ymax_array.async_store_array_subset(
-            &ArraySubset::new_with_shape(array_shape.clone()),
-            &ymax,
-        ))?;
+        rt.block_on(
+            ymax_array
+                .async_store_array_subset(&ArraySubset::new_with_shape(array_shape.clone()), &ymax),
+        )?;
     }
     if arrays.contains(&ArraysToGenerate::RtreeIndex) {
         let index_group = zarrs::group::GroupBuilder::new().build(store.clone(), "/indexes")?;

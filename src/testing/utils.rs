@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
-use zarrs::array::{ArrayBuilder, ArraySubset, FillValue};
 use zarrs::array::data_type::{self, NumpyTimeUnit};
+use zarrs::array::{ArrayBuilder, ArraySubset, FillValue};
 use zarrs_icechunk::AsyncIcechunkStore;
 use zarrs_object_store::AsyncObjectStore;
 use zarrs_storage::AsyncReadableWritableListableStorageTraits;
@@ -160,8 +160,13 @@ pub(crate) async fn generate_test_data_arrays(
         bbox_data.push(buffer);
     }
 
-    let bbox_array = ArrayBuilder::new(vec![3], vec![3], data_type::bytes(), FillValue::from(vec![]))
-        .build(store.clone(), "/meta/bbox")?;
+    let bbox_array = ArrayBuilder::new(
+        vec![3],
+        vec![3],
+        data_type::bytes(),
+        FillValue::from(vec![]),
+    )
+    .build(store.clone(), "/meta/bbox")?;
 
     bbox_array.async_store_metadata().await?;
     bbox_array

@@ -109,9 +109,7 @@ async fn test_load_date_array() {
     let array_subset = ArraySubset::new_with_shape(date_array.shape().to_vec());
 
     // Read the entire array as i64 milliseconds (datetime64[ms])
-    let data: Vec<i64> = date_array
-        .retrieve_array_subset(&array_subset)
-        .unwrap();
+    let data: Vec<i64> = date_array.retrieve_array_subset(&array_subset).unwrap();
 
     println!("Date array contents (milliseconds since epoch):");
     for (i, ms) in data.iter().enumerate() {
