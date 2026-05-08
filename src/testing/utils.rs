@@ -4,9 +4,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
-use zarrs::array::{ArrayBuilder, DataType, FillValue};
-use zarrs::array_subset::ArraySubset;
-use zarrs::metadata_ext::data_type::NumpyTimeUnit;
+use zarrs::array::{ArrayBuilder, ArraySubset, FillValue};
+use zarrs::array::data_type::{self, NumpyTimeUnit};
 use zarrs_icechunk::AsyncIcechunkStore;
 use zarrs_object_store::AsyncObjectStore;
 use zarrs_storage::AsyncReadableWritableListableStorageTraits;
@@ -110,28 +109,25 @@ pub(crate) async fn generate_test_data_arrays(
     let date_array = ArrayBuilder::new(
         vec![3],
         vec![3],
-        DataType::NumpyDateTime64 {
-            unit: NumpyTimeUnit::Millisecond,
-            scale_factor: 1.try_into().unwrap(),
-        },
+        data_type::numpy_datetime64(NumpyTimeUnit::Millisecond, 1.try_into().unwrap()),
         FillValue::from(0i64),
     )
     .build(store.clone(), "/meta/date")?;
 
     date_array.async_store_metadata().await?;
     date_array
-        .async_store_array_subset_elements(&ArraySubset::new_with_shape(vec![3]), &date_data)
+        .async_store_array_subset(&ArraySubset::new_with_shape(vec![3]), &date_data)
         .await?;
 
     let collection_data = vec!["collection_a", "collection_b", "collection_c"];
 
     let collection_array =
-        ArrayBuilder::new(vec![3], vec![3], DataType::String, FillValue::from(""))
+        ArrayBuilder::new(vec![3], vec![3], data_type::string(), FillValue::from(""))
             .build(store.clone(), "/meta/collection")?;
 
     collection_array.async_store_metadata().await?;
     collection_array
-        .async_store_array_subset_elements(&ArraySubset::new_with_shape(vec![3]), &collection_data)
+        .async_store_array_subset(&ArraySubset::new_with_shape(vec![3]), &collection_data)
         .await?;
 
     // Create bbox array - variable length bytes (WKB format)
@@ -164,12 +160,12 @@ pub(crate) async fn generate_test_data_arrays(
         bbox_data.push(buffer);
     }
 
-    let bbox_array = ArrayBuilder::new(vec![3], vec![3], DataType::Bytes, FillValue::from(vec![]))
+    let bbox_array = ArrayBuilder::new(vec![3], vec![3], data_type::bytes(), FillValue::from(vec![]))
         .build(store.clone(), "/meta/bbox")?;
 
     bbox_array.async_store_metadata().await?;
     bbox_array
-        .async_store_array_subset_elements(&ArraySubset::new_with_shape(vec![3]), &bbox_data)
+        .async_store_array_subset(&ArraySubset::new_with_shape(vec![3]), &bbox_data)
         .await?;
 
     // Generate R-tree spatial index if requested
@@ -206,14 +202,14 @@ pub(crate) async fn generate_test_data_arrays(
         let rtree_array = ArrayBuilder::new(
             vec![rtree_bytes.len() as u64],
             vec![rtree_bytes.len() as u64], // Single chunk
-            DataType::UInt8,
+            data_type::uint8(),
             FillValue::from(0u8),
         )
         .build(store.clone(), "/indexes/bbox")?;
 
         rtree_array.async_store_metadata().await?;
         rtree_array
-            .async_store_array_subset_elements(
+            .async_store_array_subset(
                 &ArraySubset::new_with_shape(vec![rtree_bytes.len() as u64]),
                 rtree_bytes.as_slice(),
             )

@@ -4,9 +4,14 @@ use arrow_schema::{DataType, Field, FieldRef, Schema, SchemaRef, TimeUnit};
 use geoarrow_schema::{Crs, WkbType};
 use std::sync::Arc;
 use zarrs::array::Array;
-use zarrs::array::data_type::DataType as ZarrDataType;
+use zarrs::array::data_type::{
+    BoolDataType, BytesDataType, Float16DataType, Float32DataType, Float64DataType,
+    Int8DataType, Int16DataType, Int32DataType, Int64DataType, NumpyDateTime64DataType,
+    NumpyTimeUnit, RawBitsDataType, StringDataType, UInt8DataType, UInt16DataType,
+    UInt32DataType, UInt64DataType,
+};
+use zarrs::array::DataType as ZarrDataType;
 use zarrs::group::Group;
-use zarrs::metadata_ext::data_type::NumpyTimeUnit;
 use zarrs::node::NodePath;
 use zarrs::storage::{AsyncReadableListableStorageTraits, ReadableListableStorageTraits};
 
@@ -55,50 +60,54 @@ fn field_name(group_root: &NodePath, array_path: &NodePath) -> String {
 /// Maps a Zarr data type to an Arrow data type
 fn zarr_to_arrow_field(name: String, zarr_dtype: &ZarrDataType) -> ZarrDataFusionResult<FieldRef> {
     if name == "bbox" {
-        match zarr_dtype {
-            ZarrDataType::Bytes => {
-                let crs = Crs::from_authority_code("EPSG:4326".to_string());
-                let geoarrow_metadata = Arc::new(geoarrow_schema::Metadata::new(crs, None));
+        if zarr_dtype.is::<BytesDataType>() {
+            let crs = Crs::from_authority_code("EPSG:4326".to_string());
+            let geoarrow_metadata = Arc::new(geoarrow_schema::Metadata::new(crs, None));
 
-                return Ok(Arc::new(
-                    Field::new(&name, DataType::BinaryView, false)
-                        .with_extension_type(WkbType::new(geoarrow_metadata)),
-                ));
-            }
-            _ => {
-                return Err(ZarrDataFusionError::Custom(format!(
-                    "Expected 'bbox' field to be of Zarr Bytes data type, got: {:?}",
-                    zarr_dtype
-                )));
-            }
+            return Ok(Arc::new(
+                Field::new(&name, DataType::BinaryView, false)
+                    .with_extension_type(WkbType::new(geoarrow_metadata)),
+            ));
+        } else {
+            return Err(ZarrDataFusionError::Custom(format!(
+                "Expected 'bbox' field to be of Zarr Bytes data type, got: {:?}",
+                zarr_dtype
+            )));
         }
     }
 
-    let data_type = match zarr_dtype {
-        ZarrDataType::Bool => DataType::Boolean,
-        ZarrDataType::Int8 => DataType::Int8,
-        ZarrDataType::Int16 => DataType::Int16,
-        ZarrDataType::Int32 => DataType::Int32,
-        ZarrDataType::Int64 => DataType::Int64,
-        ZarrDataType::UInt8 => DataType::UInt8,
-        ZarrDataType::UInt16 => DataType::UInt16,
-        ZarrDataType::UInt32 => DataType::UInt32,
-        ZarrDataType::UInt64 => DataType::UInt64,
-        ZarrDataType::Float16 => DataType::Float16,
-        ZarrDataType::Float32 => DataType::Float32,
-        ZarrDataType::Float64 => DataType::Float64,
-        ZarrDataType::Complex64 | ZarrDataType::Complex128 => {
-            return Err(ZarrDataFusionError::Custom(
-                "Complex64/Complex128 not yet supported.".to_string(),
-            ));
-        }
-        ZarrDataType::RawBits(_size) => DataType::BinaryView,
-        ZarrDataType::Bytes => DataType::BinaryView,
-        ZarrDataType::String => DataType::Utf8View,
-        ZarrDataType::NumpyDateTime64 {
-            unit,
-            scale_factor: _,
-        } => match unit {
+    let data_type = if zarr_dtype.is::<BoolDataType>() {
+        DataType::Boolean
+    } else if zarr_dtype.is::<Int8DataType>() {
+        DataType::Int8
+    } else if zarr_dtype.is::<Int16DataType>() {
+        DataType::Int16
+    } else if zarr_dtype.is::<Int32DataType>() {
+        DataType::Int32
+    } else if zarr_dtype.is::<Int64DataType>() {
+        DataType::Int64
+    } else if zarr_dtype.is::<UInt8DataType>() {
+        DataType::UInt8
+    } else if zarr_dtype.is::<UInt16DataType>() {
+        DataType::UInt16
+    } else if zarr_dtype.is::<UInt32DataType>() {
+        DataType::UInt32
+    } else if zarr_dtype.is::<UInt64DataType>() {
+        DataType::UInt64
+    } else if zarr_dtype.is::<Float16DataType>() {
+        DataType::Float16
+    } else if zarr_dtype.is::<Float32DataType>() {
+        DataType::Float32
+    } else if zarr_dtype.is::<Float64DataType>() {
+        DataType::Float64
+    } else if zarr_dtype.is::<RawBitsDataType>() {
+        DataType::BinaryView
+    } else if zarr_dtype.is::<BytesDataType>() {
+        DataType::BinaryView
+    } else if zarr_dtype.is::<StringDataType>() {
+        DataType::Utf8View
+    } else if let Some(dt) = zarr_dtype.downcast_ref::<NumpyDateTime64DataType>() {
+        match dt.unit {
             NumpyTimeUnit::Millisecond => DataType::Timestamp(TimeUnit::Millisecond, None),
             NumpyTimeUnit::Microsecond => DataType::Timestamp(TimeUnit::Microsecond, None),
             NumpyTimeUnit::Nanosecond => DataType::Timestamp(TimeUnit::Nanosecond, None),
@@ -106,22 +115,15 @@ fn zarr_to_arrow_field(name: String, zarr_dtype: &ZarrDataType) -> ZarrDataFusio
             _ => {
                 return Err(ZarrDataFusionError::Custom(format!(
                     "Unsupported Numpy datetime64 time unit: {:?}",
-                    unit
+                    dt.unit
                 )));
             }
-        },
-        ZarrDataType::Extension(ext) => {
-            return Err(ZarrDataFusionError::Custom(format!(
-                "Unsupported Zarr extension type: {}",
-                ext.name()
-            )));
         }
-        _ => {
-            return Err(ZarrDataFusionError::Custom(format!(
-                "Unsupported Zarr data type: {:?}",
-                zarr_dtype
-            )));
-        }
+    } else {
+        return Err(ZarrDataFusionError::Custom(format!(
+            "Unsupported Zarr data type: {:?}",
+            zarr_dtype
+        )));
     };
     Ok(Arc::new(Field::new(&name, data_type, false)))
 }

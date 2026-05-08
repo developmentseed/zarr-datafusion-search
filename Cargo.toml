@@ -19,12 +19,12 @@ icechunk = "0.3.16"
 object_store = "0.12.4"
 thiserror = "2"
 tokio = "1.48"
-zarrs = { version = "0.22.5", features = ["async", "chrono"] }
-zarrs_filesystem = "0.3.3"
-zarrs_metadata = "0.6.2"
-zarrs_icechunk = "0.4.1"
+zarrs = { version = "0.23.10", features = ["async", "chrono"] }
+zarrs_filesystem = "0.3.9"
+zarrs_metadata = "0.7.4"
+zarrs_icechunk = "0.4.2"
 zarrs_object_store = "0.5.0"
-zarrs_storage = { version = "0.4.0", features = ["async"] }
+zarrs_storage = { version = "0.4.3", features = ["async"] }
 
 [dev-dependencies]
 bytesize = "1"
