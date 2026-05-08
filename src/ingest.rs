@@ -711,7 +711,7 @@ async fn flush_pending(
             let col: Arc<dyn ArrowArray> = Arc::new(StringArray::from(
                 values.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
             ));
-            let array_path = format!("{}/{}", group_path, key);
+            let array_path = format!("{}/asset_{}", group_path, key);
             write_column_to_zarrs(
                 Arc::clone(&store),
                 &array_path,
@@ -949,7 +949,7 @@ mod tests {
 
         assert_eq!(rows, 2);
 
-        let b01_arr = Array::async_open(Arc::clone(&store), "/meta/B01")
+        let b01_arr = Array::async_open(Arc::clone(&store), "/meta/asset_B01")
             .await
             .unwrap();
         let hrefs: Vec<String> = b01_arr
@@ -958,7 +958,7 @@ mod tests {
             .unwrap();
         assert_eq!(hrefs, vec!["s3://bucket/b01_0.tif", "s3://bucket/b01_1.tif"]);
 
-        let thumb_arr = Array::async_open(Arc::clone(&store), "/meta/thumbnail")
+        let thumb_arr = Array::async_open(Arc::clone(&store), "/meta/asset_thumbnail")
             .await
             .unwrap();
         let thumbs: Vec<String> = thumb_arr
