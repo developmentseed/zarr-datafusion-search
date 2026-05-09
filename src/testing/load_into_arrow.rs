@@ -9,8 +9,7 @@ use icechunk::{Repository, RepositoryConfig, repository::VersionInfo};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use zarrs::array::Array;
-use zarrs::array_subset::ArraySubset;
+use zarrs::array::{Array, ArraySubset};
 use zarrs_filesystem::FilesystemStore;
 use zarrs_icechunk::AsyncIcechunkStore;
 
@@ -26,22 +25,18 @@ async fn test_load_zarrs_into_arrow_record_batch() {
         let collection_array = Array::open(store.clone(), "/meta/collection").unwrap();
         let collection_subset = ArraySubset::new_with_shape(collection_array.shape().to_vec());
         let collection_data: Vec<String> = collection_array
-            .retrieve_array_subset_elements(&collection_subset)
+            .retrieve_array_subset(&collection_subset)
             .unwrap();
 
         // Load date array (datetime64[ms])
         let date_array = Array::open(store.clone(), "/meta/date").unwrap();
         let date_subset = ArraySubset::new_with_shape(date_array.shape().to_vec());
-        let date_data: Vec<i64> = date_array
-            .retrieve_array_subset_elements(&date_subset)
-            .unwrap();
+        let date_data: Vec<i64> = date_array.retrieve_array_subset(&date_subset).unwrap();
 
         // Load bbox array (binary data representing WKB geometries)
         let bbox_array = Array::open(store.clone(), "/meta/bbox").unwrap();
         let bbox_subset = ArraySubset::new_with_shape(bbox_array.shape().to_vec());
-        let bbox_data: Vec<Vec<u8>> = bbox_array
-            .retrieve_array_subset_elements(&bbox_subset)
-            .unwrap();
+        let bbox_data: Vec<Vec<u8>> = bbox_array.retrieve_array_subset(&bbox_subset).unwrap();
 
         // Create Arrow arrays from the loaded data
         let collection_arrow: ArrayRef = Arc::new(StringArray::from(collection_data.clone()));
@@ -133,7 +128,7 @@ async fn test_load_zarrs_into_arrow_record_batch_icechunk() {
 
     let collection_subset = ArraySubset::new_with_shape(collection_array.shape().to_vec());
     let collection_data: Vec<String> = collection_array
-        .async_retrieve_array_subset_elements(&collection_subset)
+        .async_retrieve_array_subset(&collection_subset)
         .await
         .unwrap();
 
@@ -143,7 +138,7 @@ async fn test_load_zarrs_into_arrow_record_batch_icechunk() {
         .unwrap();
     let date_subset = ArraySubset::new_with_shape(date_array.shape().to_vec());
     let date_data: Vec<i64> = date_array
-        .async_retrieve_array_subset_elements(&date_subset)
+        .async_retrieve_array_subset(&date_subset)
         .await
         .unwrap();
 
@@ -153,7 +148,7 @@ async fn test_load_zarrs_into_arrow_record_batch_icechunk() {
         .unwrap();
     let bbox_subset = ArraySubset::new_with_shape(bbox_array.shape().to_vec());
     let bbox_data: Vec<Vec<u8>> = bbox_array
-        .async_retrieve_array_subset_elements(&bbox_subset)
+        .async_retrieve_array_subset(&bbox_subset)
         .await
         .unwrap();
 

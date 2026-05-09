@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "zarr_datafusion_search"
 requires-python = ">=3.10"
 dependencies = [
-  "datafusion>=53.0",
+  "datafusion>=53.0"
 ]
 classifiers = [
     "Programming Language :: Rust",

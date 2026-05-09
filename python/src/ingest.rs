@@ -3,8 +3,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use pyo3_async_runtimes::tokio::future_into_py;
 use pyo3_object_store::AnyObjectStore;
-use stac::api::{Fields, Filter, Items, Search, Sortby};
 use stac::Bbox;
+use stac::api::{Fields, Filter, Items, Search, Sortby};
 use std::sync::Arc;
 use zarrs_storage::AsyncReadableWritableListableStorageTraits;
 
@@ -122,12 +122,14 @@ pub fn build_search<'py>(
     let ids = ids.map(Vec::from).unwrap_or_default();
     let collections = collections.map(Vec::from).unwrap_or_default();
 
-    Ok(Search {
+    Search {
         items,
         intersects,
         ids,
         collections,
-    })
+    }
+    .normalize_datetimes()
+    .map_err(|e| PyValueError::new_err(format!("Invalid datetime: {e}")))
 }
 
 // -- PyO3 function --
@@ -159,10 +161,7 @@ pub fn ingest_stac_search<'py>(
     // Deserialize icechunk session from Python if provided
     let icechunk_session = match session {
         Some(ref s) => {
-            let bytes: Vec<u8> = s
-                .getattr("_session")?
-                .call_method0("as_bytes")?
-                .extract()?;
+            let bytes: Vec<u8> = s.getattr("_session")?.call_method0("as_bytes")?.extract()?;
             Some(
                 icechunk::session::Session::from_bytes(bytes)
                     .map_err(|e| PyValueError::new_err(format!("Invalid icechunk session: {e}")))?,
@@ -172,14 +171,24 @@ pub fn ingest_stac_search<'py>(
     };
 
     let search = build_search(
-        py, intersects, ids, collections, limit, bbox, datetime, include, exclude, sortby, filter,
+        py,
+        intersects,
+        ids,
+        collections,
+        limit,
+        bbox,
+        datetime,
+        include,
+        exclude,
+        sortby,
+        filter,
         query,
     )?;
 
     let asset_href_strings = asset_hrefs.unwrap_or_default();
 
-    let icechunk_store = icechunk_session
-        .map(|sess| Arc::new(zarrs_icechunk::AsyncIcechunkStore::new(sess)));
+    let icechunk_store =
+        icechunk_session.map(|sess| Arc::new(zarrs_icechunk::AsyncIcechunkStore::new(sess)));
     let zarr_store: Arc<dyn AsyncReadableWritableListableStorageTraits> =
         match (&icechunk_store, store) {
             (Some(ic), None) => Arc::clone(ic) as _,
@@ -187,12 +196,10 @@ pub fn ingest_stac_search<'py>(
             (Some(_), Some(_)) => {
                 return Err(PyValueError::new_err(
                     "Provide either 'store' or 'session', not both",
-                ))
+                ));
             }
             (None, None) => {
-                return Err(PyValueError::new_err(
-                    "Provide either 'store' or 'session'",
-                ))
+                return Err(PyValueError::new_err("Provide either 'store' or 'session'"));
             }
         };
 

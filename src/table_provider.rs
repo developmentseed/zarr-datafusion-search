@@ -39,8 +39,7 @@ use std::sync::Arc;
 use tokio::runtime::Handle;
 use tokio::sync::Semaphore;
 use wkt::Wkt;
-use zarrs::array::Array;
-use zarrs::array_subset::ArraySubset;
+use zarrs::array::{Array, ArraySubset};
 use zarrs::group::Group;
 use zarrs::storage::AsyncReadableListableStorageTraits;
 use zarrs_icechunk::AsyncIcechunkStore;
@@ -153,9 +152,7 @@ impl ZarrTableProvider {
         let index_array = Array::async_open(store, index_path).await?;
         let array_shape = index_array.shape();
         let rtree_bytes: Vec<u8> = index_array
-            .async_retrieve_array_subset_elements(&ArraySubset::new_with_shape(
-                array_shape.to_vec(),
-            ))
+            .async_retrieve_array_subset(&ArraySubset::new_with_shape(array_shape.to_vec()))
             .await?;
         Ok(rtree_bytes)
     }
@@ -606,7 +603,7 @@ fn group_row_indices_by_chunk(
 
         // For 1D array, calculate chunk index and local index within chunk
         if chunk_shape.len() == 1 {
-            let chunk_size = chunk_shape[0];
+            let chunk_size = chunk_shape[0].get();
             let chunk_idx = vec![row_idx / chunk_size];
             let local_idx = row_idx % chunk_size;
 
@@ -614,7 +611,7 @@ fn group_row_indices_by_chunk(
         } else {
             // For multi-dimensional, would need to calculate properly
             // For now, assume 1D
-            let chunk_size = chunk_shape[0];
+            let chunk_size = chunk_shape[0].get();
             let chunk_idx = vec![row_idx / chunk_size];
             let local_idx = row_idx % chunk_size;
 
@@ -693,7 +690,7 @@ async fn scan_chunks_async(
             ArraySubset::new_with_ranges(&ranges)
                 .indices()
                 .into_iter()
-                .map(|chunk_idx| (chunk_idx, None))
+                .map(|chunk_idx| (chunk_idx.to_vec(), None))
                 .collect()
         };
 
@@ -990,68 +987,68 @@ async fn retrieve_chunk_as_arrow_async<S: AsyncReadableListableStorageTraits + '
     let data_type = field.data_type();
     match data_type {
         DataType::Boolean => {
-            let data: Vec<bool> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<bool> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(BooleanArray::from(data)))
         }
         DataType::Int8 => {
-            let data: Vec<i8> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<i8> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(Int8Array::from(data)))
         }
         DataType::Int16 => {
-            let data: Vec<i16> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<i16> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(Int16Array::from(data)))
         }
         DataType::Int32 => {
-            let data: Vec<i32> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<i32> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(Int32Array::from(data)))
         }
         DataType::Int64 => {
-            let data: Vec<i64> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<i64> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(Int64Array::from(data)))
         }
         DataType::UInt8 => {
-            let data: Vec<u8> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<u8> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(UInt8Array::from(data)))
         }
         DataType::UInt16 => {
-            let data: Vec<u16> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<u16> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(UInt16Array::from(data)))
         }
         DataType::UInt32 => {
-            let data: Vec<u32> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<u32> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(UInt32Array::from(data)))
         }
         DataType::UInt64 => {
-            let data: Vec<u64> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<u64> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(UInt64Array::from(data)))
         }
         DataType::Float32 => {
-            let data: Vec<f32> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<f32> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(Float32Array::from(data)))
         }
         DataType::Float64 => {
-            let data: Vec<f64> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<f64> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(Float64Array::from(data)))
         }
         DataType::Binary | DataType::LargeBinary | DataType::BinaryView => {
-            let data: Vec<Vec<u8>> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<Vec<u8>> = array.async_retrieve_array_subset(&subset).await?;
             let arrow_array = binary_vec_to_arrow(data, data_type);
             Ok(arrow_array)
         }
         DataType::Utf8 => {
-            let data: Vec<String> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<String> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(StringArray::from(data)))
         }
         DataType::LargeUtf8 => {
-            let data: Vec<String> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<String> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(LargeStringArray::from(data)))
         }
         DataType::Utf8View => {
-            let data: Vec<String> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<String> = array.async_retrieve_array_subset(&subset).await?;
             Ok(Arc::new(StringViewArray::from(data)))
         }
         DataType::Timestamp(unit, _) => {
-            let data: Vec<i64> = array.async_retrieve_array_subset_elements(&subset).await?;
+            let data: Vec<i64> = array.async_retrieve_array_subset(&subset).await?;
             let arrow_array = i64_vec_to_timestamp_arrow(data.clone(), unit);
             Ok(arrow_array)
         }
@@ -1404,8 +1401,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_corrupt_spatial_index_returns_error() {
-        use zarrs::array::{ArrayBuilder, DataType, FillValue};
-        use zarrs::array_subset::ArraySubset;
+        use zarrs::array::data_type;
+        use zarrs::array::{ArrayBuilder, ArraySubset, FillValue};
 
         // Build a store with normal data but no geoindex, then write garbage bytes
         // where the rtree index would be.
@@ -1421,14 +1418,14 @@ mod tests {
         let index_array = ArrayBuilder::new(
             vec![garbage.len() as u64],
             vec![garbage.len() as u64],
-            DataType::UInt8,
+            data_type::uint8(),
             FillValue::from(0u8),
         )
         .build(store.clone(), "/indexes/bbox")
         .unwrap();
         index_array.async_store_metadata().await.unwrap();
         index_array
-            .async_store_array_subset_elements(
+            .async_store_array_subset(
                 &ArraySubset::new_with_shape(vec![garbage.len() as u64]),
                 garbage.as_slice(),
             )

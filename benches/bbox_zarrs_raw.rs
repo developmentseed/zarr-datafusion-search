@@ -41,7 +41,7 @@ fn bbox_zarrs_raw_bench(c: &mut Criterion) {
                 let subset = bbox_array.chunk_subset_bounded(&chunk_indices).unwrap();
 
                 let data: Vec<Vec<u8>> = bbox_array
-                    .async_retrieve_array_subset_elements(&subset)
+                    .async_retrieve_array_subset(&subset)
                     .await
                     .unwrap();
 

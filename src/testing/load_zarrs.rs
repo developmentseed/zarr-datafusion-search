@@ -4,8 +4,7 @@ use icechunk::{Repository, RepositoryConfig, repository::VersionInfo};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use zarrs::array::Array;
-use zarrs::array_subset::ArraySubset;
+use zarrs::array::{Array, ArraySubset};
 use zarrs_filesystem::FilesystemStore;
 use zarrs_icechunk::AsyncIcechunkStore;
 
@@ -29,7 +28,7 @@ async fn test_load_collection_array() {
 
         // Read the entire array as strings
         let data: Vec<String> = collection_array
-            .retrieve_array_subset_elements(&array_subset)
+            .retrieve_array_subset(&array_subset)
             .unwrap();
 
         println!("Collection array contents:");
@@ -74,7 +73,7 @@ async fn test_load_collection_array_icechunk() {
 
     //// Read the entire array as strings
     let data: Vec<String> = collection_array
-        .async_retrieve_array_subset_elements(&array_subset)
+        .async_retrieve_array_subset(&array_subset)
         .await
         .unwrap();
 
@@ -110,9 +109,7 @@ async fn test_load_date_array() {
     let array_subset = ArraySubset::new_with_shape(date_array.shape().to_vec());
 
     // Read the entire array as i64 milliseconds (datetime64[ms])
-    let data: Vec<i64> = date_array
-        .retrieve_array_subset_elements(&array_subset)
-        .unwrap();
+    let data: Vec<i64> = date_array.retrieve_array_subset(&array_subset).unwrap();
 
     println!("Date array contents (milliseconds since epoch):");
     for (i, ms) in data.iter().enumerate() {
@@ -155,7 +152,7 @@ async fn test_load_date_array_icechunk() {
 
     // Read the entire array as i64 milliseconds (datetime64[ms])
     let data: Vec<i64> = date_array
-        .async_retrieve_array_subset_elements(&array_subset)
+        .async_retrieve_array_subset(&array_subset)
         .await
         .unwrap();
 
