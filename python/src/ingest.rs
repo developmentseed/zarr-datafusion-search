@@ -135,12 +135,11 @@ pub fn build_search<'py>(
 // -- PyO3 function --
 
 #[pyfunction]
-#[pyo3(signature = (url, group_path, *, store=None, session=None, intersects=None, ids=None, collections=None, max_items=None, limit=None, bbox=None, datetime=None, include=None, exclude=None, sortby=None, filter=None, query=None, chunk_size=1000, asset_hrefs=None))]
+#[pyo3(signature = (url, *, store=None, session=None, intersects=None, ids=None, collections=None, max_items=None, limit=None, bbox=None, datetime=None, include=None, exclude=None, sortby=None, filter=None, query=None, chunk_size=1000, asset_hrefs=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn ingest_stac_search<'py>(
     py: Python<'py>,
     url: String,
-    group_path: String,
     store: Option<AnyObjectStore>,
     session: Option<Bound<'py, PyAny>>,
     intersects: Option<StringOrDict>,
@@ -209,7 +208,6 @@ pub fn ingest_stac_search<'py>(
             &url,
             search,
             zarr_store,
-            &group_path,
             chunk_size,
             &asset_refs,
             max_items,

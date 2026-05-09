@@ -331,7 +331,6 @@ pub async fn ingest_stac_search<C>(
     client: &C,
     search: Search,
     store: Arc<dyn AsyncReadableWritableListableStorageTraits>,
-    group_path: &str,
     chunk_size: usize,
     asset_hrefs: &[&str],
 ) -> ZarrDataFusionResult<u64>
@@ -339,12 +338,14 @@ where
     C: ArrowItemsClient,
     C::Error: std::error::Error + Send + Sync + 'static,
 {
+    const GROUP_PATH: &str = "/meta";
+
     // Force zarrs to write chunks even when all values equal the fill value.
     zarrs::config::global_config_mut().set_store_empty_chunks(true);
 
     // 1. Detect existing store state
     let (existing_row_count, effective_chunk_size) =
-        detect_existing_store(Arc::clone(&store), group_path, chunk_size).await?;
+        detect_existing_store(Arc::clone(&store), GROUP_PATH, chunk_size).await?;
 
     // 2. Ensure root and meta groups exist
     if Group::async_open(Arc::clone(&store), "/").await.is_err() {
@@ -358,10 +359,10 @@ where
             .await
             .map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
     }
-    if Group::async_open(Arc::clone(&store), group_path).await.is_err() {
+    if Group::async_open(Arc::clone(&store), GROUP_PATH).await.is_err() {
         let meta = Group::new_with_metadata(
             Arc::clone(&store),
-            group_path,
+            GROUP_PATH,
             zarrs::group::GroupMetadata::V3(zarrs::group::GroupMetadataV3::default()),
         )
         .map_err(|e| ZarrDataFusionError::Custom(format!("Failed to create meta group: {e}")))?;
@@ -389,7 +390,7 @@ where
             let write_offset = existing_row_count + rows_written;
             let flushed = flush_pending(
                 Arc::clone(&store),
-                group_path,
+                GROUP_PATH,
                 &mut pending_batches,
                 &mut pending_rows,
                 effective_chunk_size,
@@ -409,7 +410,7 @@ where
         let write_offset = existing_row_count + rows_written;
         let flushed = flush_pending(
             Arc::clone(&store),
-            group_path,
+            GROUP_PATH,
             &mut pending_batches,
             &mut pending_rows,
             remainder_count,
@@ -501,7 +502,6 @@ pub async fn ingest_stac_api(
     url: &str,
     search: Search,
     store: Arc<dyn AsyncReadableWritableListableStorageTraits>,
-    group_path: &str,
     chunk_size: usize,
     asset_hrefs: &[&str],
     max_items: Option<u64>,
@@ -509,7 +509,7 @@ pub async fn ingest_stac_api(
     let io_client = stac_io::api::Client::new(url)
         .map_err(|e| ZarrDataFusionError::StacSearch(e.to_string()))?;
     let client = HttpArrowClient::new(io_client, max_items);
-    ingest_stac_search(&client, search, store, group_path, chunk_size, asset_hrefs).await
+    ingest_stac_search(&client, search, store, chunk_size, asset_hrefs).await
 }
 
 /// Column names for `proj:transform` after flattening.
@@ -824,7 +824,6 @@ mod tests {
             &client,
             Search::default(),
             Arc::clone(&store),
-            "/meta",
             100,
             &[],
         )
@@ -912,7 +911,7 @@ mod tests {
         );
         let schema = batch1.schema();
         let client1 = MockClient { batches: vec![batch1], schema: schema.clone() };
-        ingest_stac_search(&client1, Search::default(), Arc::clone(&store), "/meta", 100, &[])
+        ingest_stac_search(&client1, Search::default(), Arc::clone(&store), 100, &[])
             .await
             .unwrap();
 
@@ -923,7 +922,7 @@ mod tests {
             &["col", "col"],
         );
         let client2 = MockClient { batches: vec![batch2], schema };
-        let rows = ingest_stac_search(&client2, Search::default(), Arc::clone(&store), "/meta", 999, &[])
+        let rows = ingest_stac_search(&client2, Search::default(), Arc::clone(&store), 999, &[])
             .await
             .unwrap();
 
@@ -950,7 +949,6 @@ mod tests {
             &client,
             Search::default(),
             Arc::clone(&store),
-            "/meta",
             100,
             &["B01", "thumbnail"],
         )
@@ -1268,7 +1266,6 @@ mod tests {
             &client,
             Search::default(),
             Arc::clone(&store),
-            "/meta",
             100,
             &[],
         )
