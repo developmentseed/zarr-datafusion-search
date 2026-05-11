@@ -134,6 +134,64 @@ pub fn build_search<'py>(
 
 // -- PyO3 function --
 
+/// Ingest STAC API search results into a Zarr store.
+///
+/// Queries a STAC API, converts matching items to Arrow, and writes them as
+/// 1-D Zarr arrays under the ``/meta`` group. Supports both
+/// ``obstore``-backed stores and Icechunk sessions.
+///
+/// Parameters
+/// ----------
+/// url : str
+///     Base URL of the STAC API
+///     (e.g. ``"https://earth-search.aws.element84.com/v1"``).
+/// store : ObjectStore, optional
+///     An ``obstore`` object store to write into. Mutually exclusive with
+///     ``session``.
+/// session : icechunk.Session, optional
+///     An Icechunk writable session to write into. Mutually exclusive with
+///     ``store``.
+/// intersects : str or dict, optional
+///     GeoJSON geometry (as a string or dict) to filter items by spatial
+///     intersection.
+/// ids : str or list[str], optional
+///     One or more STAC item IDs to fetch.
+/// collections : str or list[str], optional
+///     One or more collection IDs to search within.
+/// max_items : int, optional
+///     Maximum number of items to ingest. When ``None``, all matching items
+///     are fetched.
+/// limit : int, optional
+///     Page size for the STAC API search request.
+/// bbox : list[float], optional
+///     Bounding box filter as ``[west, south, east, north]``.
+/// datetime : str, optional
+///     Datetime filter as a single datetime or a ``/``-separated range
+///     (e.g. ``"2024-01-01/2024-06-01"``).
+/// include : str or list[str], optional
+///     Fields to include in the response (STAC API Fields extension).
+/// exclude : str or list[str], optional
+///     Fields to exclude from the response (STAC API Fields extension).
+/// sortby : str or list[str], optional
+///     Sort order (STAC API Sort extension), e.g. ``"+datetime"`` or
+///     ``"-eo:cloud_cover"``.
+/// filter : str or dict, optional
+///     CQL2 filter as a text string or a CQL2-JSON dict (STAC API Filter
+///     extension).
+/// query : dict, optional
+///     Legacy STAC API query parameters.
+/// chunk_size : int, default 1000
+///     Number of rows per Zarr chunk for newly created arrays. Ignored when
+///     appending to an existing store.
+/// asset_hrefs : list[str], optional
+///     Asset keys (e.g. ``["B01", "thumbnail"]``) whose ``href`` values
+///     should be extracted and written as ``/meta/asset_{key}`` string
+///     arrays.
+///
+/// Returns
+/// -------
+/// int
+///     The number of rows written.
 #[pyfunction]
 #[pyo3(signature = (url, *, store=None, session=None, intersects=None, ids=None, collections=None, max_items=None, limit=None, bbox=None, datetime=None, include=None, exclude=None, sortby=None, filter=None, query=None, chunk_size=1000, asset_hrefs=None))]
 #[allow(clippy::too_many_arguments)]
