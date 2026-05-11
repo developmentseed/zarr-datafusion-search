@@ -7459,6 +7459,7 @@ dependencies = [
  "icechunk",
  "object_store 0.12.5",
  "rand 0.8.6",
+ "serde_json",
  "stac",
  "stac-io",
  "tempfile",

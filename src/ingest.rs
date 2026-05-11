@@ -8,6 +8,8 @@ use arrow_array::{
     TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray, UInt8Array,
     UInt16Array, UInt32Array, UInt64Array,
 };
+use geo::{Polygon, Rect, coord};
+use wkb::writer::{WriteOptions, write_polygon};
 use arrow_schema::{DataType as ArrowDataType, Field, Schema, TimeUnit};
 use futures::StreamExt;
 use stac::api::{ArrowItemsClient, Search, StreamItemsClient};
@@ -15,6 +17,7 @@ use zarrs::array::{Array, ArrayBuilder};
 use zarrs::array::{ArraySubset, ChunkShapeTraits};
 use zarrs::group::Group;
 use zarrs::storage::AsyncReadableWritableListableStorageTraits;
+use zarrs_storage::StoreKey;
 
 use crate::error::{ZarrDataFusionError, ZarrDataFusionResult};
 use crate::schema::{arrow_to_zarr_dtype, zarr_fill_value};
@@ -127,6 +130,50 @@ async fn detect_existing_store(
     Ok((row_count, eff_chunk_size))
 }
 
+/// Patch zarr v3 metadata for bytes arrays so zarr-python can read them.
+///
+/// zarrs serializes the bytes fill value as a JSON array (e.g. `[]`) but
+/// zarr-python's `VariableLengthBytes` expects a base64-encoded string (e.g. `""`).
+/// zarrs reads both formats, so this patch is backwards-compatible.
+async fn patch_bytes_fill_value(
+    store: &dyn AsyncReadableWritableListableStorageTraits,
+    array_path: &str,
+) -> ZarrDataFusionResult<()> {
+    let key_str = format!("{}/zarr.json", array_path.trim_start_matches('/'));
+    let key = StoreKey::new(key_str)
+        .map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
+
+    let metadata_bytes = store
+        .get(&key)
+        .await
+        .map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?
+        .ok_or_else(|| ZarrDataFusionError::Custom("Metadata not found".to_string()))?;
+
+    let mut metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes)
+        .map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
+
+    if let Some(obj) = metadata.as_object_mut() {
+        if let Some(fv) = obj.get("fill_value") {
+            if fv.is_array() {
+                obj.insert(
+                    "fill_value".to_string(),
+                    serde_json::Value::String(String::new()),
+                );
+            }
+        }
+    }
+
+    let patched = serde_json::to_vec(&metadata)
+        .map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
+
+    store
+        .set(&key, zarrs_storage::Bytes::from(patched))
+        .await
+        .map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
+
+    Ok(())
+}
+
 /// Write a single Arrow column array to a Zarr 1D array at `array_path`.
 ///
 /// - If the array doesn't exist: creates it with the appropriate shape.
@@ -191,6 +238,14 @@ async fn write_column_to_zarrs(
             .map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
         arr
     };
+
+    // Patch bytes fill value for zarr-python compatibility
+    if matches!(
+        arrow_type,
+        ArrowDataType::Binary | ArrowDataType::LargeBinary | ArrowDataType::BinaryView
+    ) {
+        patch_bytes_fill_value(store.as_ref(), array_path).await?;
+    }
 
     let subset = ArraySubset::new_with_ranges(&[write_offset..(write_offset + num_rows)]);
 
@@ -549,6 +604,18 @@ fn flatten_list_columns(batch: &RecordBatch) -> ZarrDataFusionResult<RecordBatch
         let col = batch.column(i);
 
         match field.name().as_str() {
+            "bbox" => {
+                let bbox_struct = col
+                    .as_any()
+                    .downcast_ref::<StructArray>()
+                    .ok_or_else(|| {
+                        ZarrDataFusionError::Custom(format!(
+                            "Expected bbox to be Struct, got {:?}",
+                            field.data_type()
+                        ))
+                    })?;
+                bbox_struct_to_wkb(bbox_struct, &mut new_fields, &mut new_columns)?;
+            }
             "proj:transform" => {
                 let list = col
                     .as_any()
@@ -650,6 +717,56 @@ fn flatten_int_list(
         fields.push(Arc::new(Field::new(*name, ArrowDataType::Int64, false)));
         columns.push(Arc::new(Int64Array::from(values)));
     }
+    Ok(())
+}
+
+/// Convert a Struct{xmin, ymin, xmax, ymax} bbox column (from `stac::geoarrow::encode`)
+/// into a BinaryView column of WKB polygons. Each bbox becomes a closed rectangle
+/// polygon via `geo::Rect`.
+fn bbox_struct_to_wkb(
+    bbox_array: &StructArray,
+    fields: &mut Vec<Arc<Field>>,
+    columns: &mut Vec<Arc<dyn ArrowArray>>,
+) -> ZarrDataFusionResult<()> {
+    let get_f64_col = |name: &str| -> ZarrDataFusionResult<&Float64Array> {
+        bbox_array
+            .column_by_name(name)
+            .and_then(|c| c.as_any().downcast_ref::<Float64Array>())
+            .ok_or_else(|| {
+                ZarrDataFusionError::Custom(format!(
+                    "bbox struct missing or non-Float64 field '{name}'"
+                ))
+            })
+    };
+
+    let xmin = get_f64_col("xmin")?;
+    let ymin = get_f64_col("ymin")?;
+    let xmax = get_f64_col("xmax")?;
+    let ymax = get_f64_col("ymax")?;
+
+    let num_rows = bbox_array.len();
+    let opts = WriteOptions::default();
+    let mut wkb_bytes: Vec<Vec<u8>> = Vec::with_capacity(num_rows);
+
+    for row in 0..num_rows {
+        if bbox_array.is_null(row) {
+            wkb_bytes.push(vec![]);
+            continue;
+        }
+        let rect = Rect::new(
+            coord! { x: xmin.value(row), y: ymin.value(row) },
+            coord! { x: xmax.value(row), y: ymax.value(row) },
+        );
+        let polygon: Polygon = rect.into();
+        let mut buf = Vec::new();
+        write_polygon(&mut buf, &polygon, &opts)
+            .map_err(|e| ZarrDataFusionError::Custom(format!("WKB encode error: {e}")))?;
+        wkb_bytes.push(buf);
+    }
+
+    let binary_array = BinaryViewArray::from_iter_values(wkb_bytes.iter().map(|b| b.as_slice()));
+    fields.push(Arc::new(Field::new("bbox", ArrowDataType::BinaryView, false)));
+    columns.push(Arc::new(binary_array));
     Ok(())
 }
 
@@ -879,7 +996,6 @@ mod tests {
             &client,
             Search::default(),
             Arc::clone(&store),
-            "/meta",
             2, // chunk_size=2
             &[],
         )
@@ -1332,5 +1448,96 @@ mod tests {
             .unwrap();
         // First 3 are fill value (0), last 2 are real data
         assert_eq!(read_back, vec![0i64, 0, 0, 100, 200]);
+    }
+
+    #[tokio::test]
+    async fn test_ingest_bbox_writes_wkb_polygons() {
+        use arrow_schema::Fields;
+        use geo::{Polygon, Rect, coord};
+        use wkb::writer::{WriteOptions, write_polygon};
+
+        let (store, _dir) = make_test_store().await;
+
+        // Build a bbox struct column matching stac::geoarrow::encode output:
+        // Struct { xmin: Float64, ymin: Float64, xmax: Float64, ymax: Float64 }
+        let bbox_struct = StructArray::from(vec![
+            (
+                Arc::new(Field::new("xmin", DataType::Float64, true)),
+                Arc::new(Float64Array::from(vec![-10.0, -125.0])) as Arc<dyn ArrowArray>,
+            ),
+            (
+                Arc::new(Field::new("ymin", DataType::Float64, true)),
+                Arc::new(Float64Array::from(vec![35.0, 25.0])) as Arc<dyn ArrowArray>,
+            ),
+            (
+                Arc::new(Field::new("xmax", DataType::Float64, true)),
+                Arc::new(Float64Array::from(vec![30.0, -65.0])) as Arc<dyn ArrowArray>,
+            ),
+            (
+                Arc::new(Field::new("ymax", DataType::Float64, true)),
+                Arc::new(Float64Array::from(vec![60.0, 50.0])) as Arc<dyn ArrowArray>,
+            ),
+        ]);
+
+        let bbox_fields = Fields::from(vec![
+            Field::new("xmin", DataType::Float64, true),
+            Field::new("ymin", DataType::Float64, true),
+            Field::new("xmax", DataType::Float64, true),
+            Field::new("ymax", DataType::Float64, true),
+        ]);
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Utf8, false),
+            Field::new("bbox", DataType::Struct(bbox_fields), true),
+        ]));
+
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(StringArray::from(vec!["item-0", "item-1"])),
+                Arc::new(bbox_struct),
+            ],
+        )
+        .unwrap();
+
+        let client = MockClient {
+            batches: vec![batch],
+            schema,
+        };
+
+        let rows = ingest_stac_search(
+            &client,
+            Search::default(),
+            Arc::clone(&store),
+            100,
+            &[],
+        )
+        .await
+        .unwrap();
+        assert_eq!(rows, 2);
+
+        // Verify bbox array exists and contains valid WKB
+        let bbox_arr = Array::async_open(Arc::clone(&store), "/meta/bbox")
+            .await
+            .expect("bbox array should exist");
+        assert_eq!(bbox_arr.shape(), &[2u64]);
+
+        let wkb_data: Vec<Vec<u8>> = bbox_arr
+            .async_retrieve_array_subset_elements(&ArraySubset::new_with_shape(vec![2u64]))
+            .await
+            .unwrap();
+        assert_eq!(wkb_data.len(), 2);
+        assert!(!wkb_data[0].is_empty(), "WKB bytes should not be empty");
+        assert!(!wkb_data[1].is_empty(), "WKB bytes should not be empty");
+
+        // Verify the WKB matches what we'd generate directly from the same bbox
+        let expected_rect = Rect::new(
+            coord! { x: -10.0, y: 35.0 },
+            coord! { x: 30.0, y: 60.0 },
+        );
+        let expected_polygon: Polygon = expected_rect.into();
+        let mut expected_buf = Vec::new();
+        write_polygon(&mut expected_buf, &expected_polygon, &WriteOptions::default()).unwrap();
+        assert_eq!(wkb_data[0], expected_buf, "WKB for row 0 should match expected polygon");
     }
 }
