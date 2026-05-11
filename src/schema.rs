@@ -142,12 +142,8 @@ pub(crate) fn arrow_to_zarr_dtype(arrow_type: &DataType) -> Option<ZarrDataType>
         DataType::UInt64 => Some(data_type::uint64()),
         DataType::Float32 => Some(data_type::float32()),
         DataType::Float64 => Some(data_type::float64()),
-        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => {
-            Some(data_type::string())
-        }
-        DataType::Binary | DataType::LargeBinary | DataType::BinaryView => {
-            Some(data_type::bytes())
-        }
+        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => Some(data_type::string()),
+        DataType::Binary | DataType::LargeBinary | DataType::BinaryView => Some(data_type::bytes()),
         DataType::Timestamp(TimeUnit::Second, _) => Some(data_type::numpy_datetime64(
             NumpyTimeUnit::Second,
             std::num::NonZeroU32::new(1).unwrap(),
@@ -248,30 +244,74 @@ mod tests {
     fn test_arrow_to_zarr_dtype_scalars() {
         use arrow_schema::TimeUnit;
 
-        assert!(arrow_to_zarr_dtype(&DataType::Boolean).unwrap().is::<BoolDataType>());
-        assert!(arrow_to_zarr_dtype(&DataType::Int64).unwrap().is::<Int64DataType>());
-        assert!(arrow_to_zarr_dtype(&DataType::UInt32).unwrap().is::<UInt32DataType>());
-        assert!(arrow_to_zarr_dtype(&DataType::Float64).unwrap().is::<Float64DataType>());
-        assert!(arrow_to_zarr_dtype(&DataType::Utf8).unwrap().is::<StringDataType>());
-        assert!(arrow_to_zarr_dtype(&DataType::LargeUtf8).unwrap().is::<StringDataType>());
-        assert!(arrow_to_zarr_dtype(&DataType::Utf8View).unwrap().is::<StringDataType>());
-        assert!(arrow_to_zarr_dtype(&DataType::Binary).unwrap().is::<BytesDataType>());
-        assert!(arrow_to_zarr_dtype(&DataType::BinaryView).unwrap().is::<BytesDataType>());
-        assert!(arrow_to_zarr_dtype(&DataType::Timestamp(TimeUnit::Millisecond, None))
-            .unwrap()
-            .is::<NumpyDateTime64DataType>());
-        assert!(arrow_to_zarr_dtype(&DataType::Timestamp(TimeUnit::Second, None))
-            .unwrap()
-            .is::<NumpyDateTime64DataType>());
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Boolean)
+                .unwrap()
+                .is::<BoolDataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Int64)
+                .unwrap()
+                .is::<Int64DataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::UInt32)
+                .unwrap()
+                .is::<UInt32DataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Float64)
+                .unwrap()
+                .is::<Float64DataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Utf8)
+                .unwrap()
+                .is::<StringDataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::LargeUtf8)
+                .unwrap()
+                .is::<StringDataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Utf8View)
+                .unwrap()
+                .is::<StringDataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Binary)
+                .unwrap()
+                .is::<BytesDataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::BinaryView)
+                .unwrap()
+                .is::<BytesDataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Timestamp(TimeUnit::Millisecond, None))
+                .unwrap()
+                .is::<NumpyDateTime64DataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Timestamp(TimeUnit::Second, None))
+                .unwrap()
+                .is::<NumpyDateTime64DataType>()
+        );
     }
 
     #[test]
     fn test_arrow_to_zarr_dtype_non_scalar_returns_none() {
         use arrow_schema::Field;
-        assert!(arrow_to_zarr_dtype(&DataType::List(Arc::new(
-            Field::new("item", DataType::Int64, true)
-        )))
-        .is_none());
+        assert!(
+            arrow_to_zarr_dtype(&DataType::List(Arc::new(Field::new(
+                "item",
+                DataType::Int64,
+                true
+            ))))
+            .is_none()
+        );
         assert!(arrow_to_zarr_dtype(&DataType::Struct(arrow_schema::Fields::empty())).is_none());
     }
 

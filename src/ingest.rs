@@ -8,11 +8,11 @@ use arrow_array::{
     TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray, UInt8Array,
     UInt16Array, UInt32Array, UInt64Array,
 };
-use geo::{Polygon, Rect, coord};
-use wkb::writer::{WriteOptions, write_polygon};
 use arrow_schema::{DataType as ArrowDataType, Field, Schema, TimeUnit};
 use futures::StreamExt;
+use geo::{Polygon, Rect, coord};
 use stac::api::{ArrowItemsClient, Search, StreamItemsClient};
+use wkb::writer::{WriteOptions, write_polygon};
 use zarrs::array::{Array, ArrayBuilder};
 use zarrs::array::{ArraySubset, ChunkShapeTraits};
 use zarrs::group::Group;
@@ -124,7 +124,12 @@ async fn detect_existing_store(
     let row_count = first.shape().first().copied().unwrap_or(0);
     let eff_chunk_size = first
         .chunk_shape(&[0])
-        .map(|cs| cs.to_array_shape().first().copied().unwrap_or(chunk_size as u64))
+        .map(|cs| {
+            cs.to_array_shape()
+                .first()
+                .copied()
+                .unwrap_or(chunk_size as u64)
+        })
         .unwrap_or(chunk_size as u64) as usize;
 
     Ok((row_count, eff_chunk_size))
@@ -140,8 +145,7 @@ async fn patch_bytes_fill_value(
     array_path: &str,
 ) -> ZarrDataFusionResult<()> {
     let key_str = format!("{}/zarr.json", array_path.trim_start_matches('/'));
-    let key = StoreKey::new(key_str)
-        .map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
+    let key = StoreKey::new(key_str).map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
 
     let metadata_bytes = store
         .get(&key)
@@ -163,8 +167,8 @@ async fn patch_bytes_fill_value(
         }
     }
 
-    let patched = serde_json::to_vec(&metadata)
-        .map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
+    let patched =
+        serde_json::to_vec(&metadata).map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
 
     store
         .set(&key, zarrs_storage::Bytes::from(patched))
@@ -190,7 +194,10 @@ async fn write_column_to_zarrs(
     effective_chunk_size: usize,
 ) -> ZarrDataFusionResult<()> {
     let zarr_dtype = arrow_to_zarr_dtype(arrow_type).ok_or_else(|| {
-        ZarrDataFusionError::Custom(format!("Unsupported Arrow type for write: {:?}", arrow_type))
+        ZarrDataFusionError::Custom(format!(
+            "Unsupported Arrow type for write: {:?}",
+            arrow_type
+        ))
     })?;
     let fill_value = zarr_fill_value(&zarr_dtype);
     let num_rows = column.len() as u64;
@@ -260,114 +267,190 @@ async fn write_column_to_zarrs(
         }
         ArrowDataType::Int8 => {
             let arr = column.as_any().downcast_ref::<Int8Array>().unwrap();
-            let data: Vec<i8> = (0..arr.len()).map(|i| if arr.is_null(i) { 0 } else { arr.value(i) }).collect();
+            let data: Vec<i8> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::Int16 => {
             let arr = column.as_any().downcast_ref::<Int16Array>().unwrap();
-            let data: Vec<i16> = (0..arr.len()).map(|i| if arr.is_null(i) { 0 } else { arr.value(i) }).collect();
+            let data: Vec<i16> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::Int32 => {
             let arr = column.as_any().downcast_ref::<Int32Array>().unwrap();
-            let data: Vec<i32> = (0..arr.len()).map(|i| if arr.is_null(i) { 0 } else { arr.value(i) }).collect();
+            let data: Vec<i32> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::Int64 => {
             let arr = column.as_any().downcast_ref::<Int64Array>().unwrap();
-            let data: Vec<i64> = (0..arr.len()).map(|i| if arr.is_null(i) { 0 } else { arr.value(i) }).collect();
+            let data: Vec<i64> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::UInt8 => {
             let arr = column.as_any().downcast_ref::<UInt8Array>().unwrap();
-            let data: Vec<u8> = (0..arr.len()).map(|i| if arr.is_null(i) { 0 } else { arr.value(i) }).collect();
+            let data: Vec<u8> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::UInt16 => {
             let arr = column.as_any().downcast_ref::<UInt16Array>().unwrap();
-            let data: Vec<u16> = (0..arr.len()).map(|i| if arr.is_null(i) { 0 } else { arr.value(i) }).collect();
+            let data: Vec<u16> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::UInt32 => {
             let arr = column.as_any().downcast_ref::<UInt32Array>().unwrap();
-            let data: Vec<u32> = (0..arr.len()).map(|i| if arr.is_null(i) { 0 } else { arr.value(i) }).collect();
+            let data: Vec<u32> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::UInt64 => {
             let arr = column.as_any().downcast_ref::<UInt64Array>().unwrap();
-            let data: Vec<u64> = (0..arr.len()).map(|i| if arr.is_null(i) { 0 } else { arr.value(i) }).collect();
+            let data: Vec<u64> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::Float32 => {
             let arr = column.as_any().downcast_ref::<Float32Array>().unwrap();
-            let data: Vec<f32> = (0..arr.len()).map(|i| if arr.is_null(i) { 0.0 } else { arr.value(i) }).collect();
+            let data: Vec<f32> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0.0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::Float64 => {
             let arr = column.as_any().downcast_ref::<Float64Array>().unwrap();
-            let data: Vec<f64> = (0..arr.len()).map(|i| if arr.is_null(i) { 0.0 } else { arr.value(i) }).collect();
+            let data: Vec<f64> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0.0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::Utf8 => {
             let arr = column.as_any().downcast_ref::<StringArray>().unwrap();
             let data: Vec<String> = (0..arr.len())
-                .map(|i| if arr.is_null(i) { String::new() } else { arr.value(i).to_string() })
+                .map(|i| {
+                    if arr.is_null(i) {
+                        String::new()
+                    } else {
+                        arr.value(i).to_string()
+                    }
+                })
                 .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::LargeUtf8 => {
             let arr = column.as_any().downcast_ref::<LargeStringArray>().unwrap();
             let data: Vec<String> = (0..arr.len())
-                .map(|i| if arr.is_null(i) { String::new() } else { arr.value(i).to_string() })
+                .map(|i| {
+                    if arr.is_null(i) {
+                        String::new()
+                    } else {
+                        arr.value(i).to_string()
+                    }
+                })
                 .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::Utf8View => {
             let arr = column.as_any().downcast_ref::<StringViewArray>().unwrap();
             let data: Vec<String> = (0..arr.len())
-                .map(|i| if arr.is_null(i) { String::new() } else { arr.value(i).to_string() })
+                .map(|i| {
+                    if arr.is_null(i) {
+                        String::new()
+                    } else {
+                        arr.value(i).to_string()
+                    }
+                })
                 .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::Binary => {
             let arr = column.as_any().downcast_ref::<BinaryArray>().unwrap();
             let data: Vec<Vec<u8>> = (0..arr.len())
-                .map(|i| if arr.is_null(i) { vec![] } else { arr.value(i).to_vec() })
+                .map(|i| {
+                    if arr.is_null(i) {
+                        vec![]
+                    } else {
+                        arr.value(i).to_vec()
+                    }
+                })
                 .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::LargeBinary => {
             let arr = column.as_any().downcast_ref::<LargeBinaryArray>().unwrap();
             let data: Vec<Vec<u8>> = (0..arr.len())
-                .map(|i| if arr.is_null(i) { vec![] } else { arr.value(i).to_vec() })
+                .map(|i| {
+                    if arr.is_null(i) {
+                        vec![]
+                    } else {
+                        arr.value(i).to_vec()
+                    }
+                })
                 .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::BinaryView => {
             let arr = column.as_any().downcast_ref::<BinaryViewArray>().unwrap();
             let data: Vec<Vec<u8>> = (0..arr.len())
-                .map(|i| if arr.is_null(i) { vec![] } else { arr.value(i).to_vec() })
+                .map(|i| {
+                    if arr.is_null(i) {
+                        vec![]
+                    } else {
+                        arr.value(i).to_vec()
+                    }
+                })
                 .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::Timestamp(TimeUnit::Second, _) => {
-            let arr = column.as_any().downcast_ref::<TimestampSecondArray>().unwrap();
-            let data: Vec<i64> = (0..arr.len()).map(|i| if arr.is_null(i) { 0 } else { arr.value(i) }).collect();
+            let arr = column
+                .as_any()
+                .downcast_ref::<TimestampSecondArray>()
+                .unwrap();
+            let data: Vec<i64> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::Timestamp(TimeUnit::Millisecond, _) => {
-            let arr = column.as_any().downcast_ref::<TimestampMillisecondArray>().unwrap();
-            let data: Vec<i64> = (0..arr.len()).map(|i| if arr.is_null(i) { 0 } else { arr.value(i) }).collect();
+            let arr = column
+                .as_any()
+                .downcast_ref::<TimestampMillisecondArray>()
+                .unwrap();
+            let data: Vec<i64> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::Timestamp(TimeUnit::Microsecond, _) => {
-            let arr = column.as_any().downcast_ref::<TimestampMicrosecondArray>().unwrap();
-            let data: Vec<i64> = (0..arr.len()).map(|i| if arr.is_null(i) { 0 } else { arr.value(i) }).collect();
+            let arr = column
+                .as_any()
+                .downcast_ref::<TimestampMicrosecondArray>()
+                .unwrap();
+            let data: Vec<i64> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         ArrowDataType::Timestamp(TimeUnit::Nanosecond, _) => {
-            let arr = column.as_any().downcast_ref::<TimestampNanosecondArray>().unwrap();
-            let data: Vec<i64> = (0..arr.len()).map(|i| if arr.is_null(i) { 0 } else { arr.value(i) }).collect();
+            let arr = column
+                .as_any()
+                .downcast_ref::<TimestampNanosecondArray>()
+                .unwrap();
+            let data: Vec<i64> = (0..arr.len())
+                .map(|i| if arr.is_null(i) { 0 } else { arr.value(i) })
+                .collect();
             zarr_array.async_store_array_subset(&subset, &data).await?;
         }
         _ => {
@@ -414,7 +497,10 @@ where
             .await
             .map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
     }
-    if Group::async_open(Arc::clone(&store), GROUP_PATH).await.is_err() {
+    if Group::async_open(Arc::clone(&store), GROUP_PATH)
+        .await
+        .is_err()
+    {
         let meta = Group::new_with_metadata(
             Arc::clone(&store),
             GROUP_PATH,
@@ -502,10 +588,7 @@ impl ArrowItemsClient for HttpArrowClient {
         std::vec::IntoIter<Result<RecordBatch, arrow_schema::ArrowError>>,
     >;
 
-    fn search_to_arrow(
-        &self,
-        search: Search,
-    ) -> Result<Self::RecordBatchStream<'_>, Self::Error> {
+    fn search_to_arrow(&self, search: Search) -> Result<Self::RecordBatchStream<'_>, Self::Error> {
         // Bridge from async (search_stream) to sync (ArrowItemsClient).
         let items = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
@@ -518,8 +601,8 @@ impl ArrowItemsClient for HttpArrowClient {
 
                 let mut items = Vec::new();
                 while let Some(result) = stream.next().await {
-                    let api_item = result
-                        .map_err(|e| ZarrDataFusionError::StacSearch(e.to_string()))?;
+                    let api_item =
+                        result.map_err(|e| ZarrDataFusionError::StacSearch(e.to_string()))?;
                     let item = stac::Item::try_from(api_item)
                         .map_err(|e| ZarrDataFusionError::StacSearch(e.to_string()))?;
                     items.push(item);
@@ -605,40 +688,36 @@ fn flatten_list_columns(batch: &RecordBatch) -> ZarrDataFusionResult<RecordBatch
 
         match field.name().as_str() {
             "bbox" => {
-                let bbox_struct = col
-                    .as_any()
-                    .downcast_ref::<StructArray>()
-                    .ok_or_else(|| {
-                        ZarrDataFusionError::Custom(format!(
-                            "Expected bbox to be Struct, got {:?}",
-                            field.data_type()
-                        ))
-                    })?;
+                let bbox_struct = col.as_any().downcast_ref::<StructArray>().ok_or_else(|| {
+                    ZarrDataFusionError::Custom(format!(
+                        "Expected bbox to be Struct, got {:?}",
+                        field.data_type()
+                    ))
+                })?;
                 bbox_struct_to_wkb(bbox_struct, &mut new_fields, &mut new_columns)?;
             }
             "proj:transform" => {
-                let list = col
-                    .as_any()
-                    .downcast_ref::<ListArray>()
-                    .ok_or_else(|| {
-                        ZarrDataFusionError::Custom(format!(
-                            "Expected proj:transform to be List, got {:?}",
-                            field.data_type()
-                        ))
-                    })?;
+                let list = col.as_any().downcast_ref::<ListArray>().ok_or_else(|| {
+                    ZarrDataFusionError::Custom(format!(
+                        "Expected proj:transform to be List, got {:?}",
+                        field.data_type()
+                    ))
+                })?;
                 // Earth-search uses Int64, but other APIs may use Float64
-                flatten_float_list_from_any(list, TRANSFORM_COLUMNS, &mut new_fields, &mut new_columns)?;
+                flatten_float_list_from_any(
+                    list,
+                    TRANSFORM_COLUMNS,
+                    &mut new_fields,
+                    &mut new_columns,
+                )?;
             }
             "proj:shape" => {
-                let list = col
-                    .as_any()
-                    .downcast_ref::<ListArray>()
-                    .ok_or_else(|| {
-                        ZarrDataFusionError::Custom(format!(
-                            "Expected proj:shape to be List, got {:?}",
-                            field.data_type()
-                        ))
-                    })?;
+                let list = col.as_any().downcast_ref::<ListArray>().ok_or_else(|| {
+                    ZarrDataFusionError::Custom(format!(
+                        "Expected proj:shape to be List, got {:?}",
+                        field.data_type()
+                    ))
+                })?;
                 flatten_int_list(list, SHAPE_COLUMNS, &mut new_fields, &mut new_columns)?;
             }
             _ => {
@@ -670,7 +749,11 @@ fn flatten_float_list_from_any(
                 let val = if let Some(arr) = inner.as_any().downcast_ref::<Float64Array>() {
                     if idx < arr.len() { arr.value(idx) } else { 0.0 }
                 } else if let Some(arr) = inner.as_any().downcast_ref::<Int64Array>() {
-                    if idx < arr.len() { arr.value(idx) as f64 } else { 0.0 }
+                    if idx < arr.len() {
+                        arr.value(idx) as f64
+                    } else {
+                        0.0
+                    }
                 } else {
                     return Err(ZarrDataFusionError::Custom(format!(
                         "Expected Float64 or Int64 values in {name}, got {:?}",
@@ -707,11 +790,7 @@ fn flatten_int_list(
                         inner.data_type()
                     ))
                 })?;
-                values.push(if idx < ints.len() {
-                    ints.value(idx)
-                } else {
-                    0
-                });
+                values.push(if idx < ints.len() { ints.value(idx) } else { 0 });
             }
         }
         fields.push(Arc::new(Field::new(*name, ArrowDataType::Int64, false)));
@@ -765,7 +844,11 @@ fn bbox_struct_to_wkb(
     }
 
     let binary_array = BinaryViewArray::from_iter_values(wkb_bytes.iter().map(|b| b.as_slice()));
-    fields.push(Arc::new(Field::new("bbox", ArrowDataType::BinaryView, false)));
+    fields.push(Arc::new(Field::new(
+        "bbox",
+        ArrowDataType::BinaryView,
+        false,
+    )));
     columns.push(Arc::new(binary_array));
     Ok(())
 }
@@ -870,10 +953,10 @@ mod tests {
     use std::sync::Arc;
 
     use object_store::local::LocalFileSystem;
-    use stac::api::{ArrowItemsClient, Search};
     use stac::api::RecordBatchReaderAdapter;
+    use stac::api::{ArrowItemsClient, Search};
     use tempfile::TempDir;
-    use zarrs::array::{Array, ArrayBuilder, data_type, FillValue};
+    use zarrs::array::{Array, ArrayBuilder, FillValue, data_type};
     use zarrs::array::{ArraySubset, ChunkShapeTraits};
     use zarrs::group::{GroupMetadata, GroupMetadataV3};
 
@@ -897,7 +980,10 @@ mod tests {
         ) -> Result<Self::RecordBatchStream<'_>, Self::Error> {
             let results: Vec<Result<RecordBatch, arrow_schema::ArrowError>> =
                 self.batches.clone().into_iter().map(Ok).collect();
-            Ok(RecordBatchReaderAdapter::new(results.into_iter(), self.schema.clone()))
+            Ok(RecordBatchReaderAdapter::new(
+                results.into_iter(),
+                self.schema.clone(),
+            ))
         }
     }
 
@@ -937,15 +1023,10 @@ mod tests {
             schema,
         };
 
-        let rows_written = ingest_stac_search(
-            &client,
-            Search::default(),
-            Arc::clone(&store),
-            100,
-            &[],
-        )
-        .await
-        .unwrap();
+        let rows_written =
+            ingest_stac_search(&client, Search::default(), Arc::clone(&store), 100, &[])
+                .await
+                .unwrap();
 
         assert_eq!(rows_written, 3);
 
@@ -955,7 +1036,7 @@ mod tests {
             .unwrap();
         assert_eq!(id_arr.shape(), &[3u64]);
         let ids: Vec<String> = id_arr
-            .async_retrieve_array_subset_elements(&ArraySubset::new_with_shape(vec![3u64]))
+            .async_retrieve_array_subset(&ArraySubset::new_with_shape(vec![3u64]))
             .await
             .unwrap();
         assert_eq!(ids, vec!["item-0", "item-1", "item-2"]);
@@ -965,7 +1046,7 @@ mod tests {
             .await
             .unwrap();
         let colls: Vec<String> = coll_arr
-            .async_retrieve_array_subset_elements(&ArraySubset::new_with_shape(vec![3u64]))
+            .async_retrieve_array_subset(&ArraySubset::new_with_shape(vec![3u64]))
             .await
             .unwrap();
         assert_eq!(colls, vec!["sentinel-2", "sentinel-2", "sentinel-2"]);
@@ -976,16 +1057,8 @@ mod tests {
         // chunk_size=2, 5 rows across 2 batches → should produce correct data
         let (store, _dir) = make_test_store().await;
 
-        let batch1 = make_stac_batch(
-            &["a", "b", "c"],
-            &[1, 2, 3],
-            &["col", "col", "col"],
-        );
-        let batch2 = make_stac_batch(
-            &["d", "e"],
-            &[4, 5],
-            &["col", "col"],
-        );
+        let batch1 = make_stac_batch(&["a", "b", "c"], &[1, 2, 3], &["col", "col", "col"]);
+        let batch2 = make_stac_batch(&["d", "e"], &[4, 5], &["col", "col"]);
         let schema = batch1.schema();
         let client = MockClient {
             batches: vec![batch1, batch2],
@@ -1009,7 +1082,7 @@ mod tests {
             .unwrap();
         assert_eq!(id_arr.shape(), &[5u64]);
         let ids: Vec<String> = id_arr
-            .async_retrieve_array_subset_elements(&ArraySubset::new_with_shape(vec![5u64]))
+            .async_retrieve_array_subset(&ArraySubset::new_with_shape(vec![5u64]))
             .await
             .unwrap();
         assert_eq!(ids, vec!["a", "b", "c", "d", "e"]);
@@ -1020,34 +1093,34 @@ mod tests {
         let (store, _dir) = make_test_store().await;
 
         // First ingest: 3 rows
-        let batch1 = make_stac_batch(
-            &["a", "b", "c"],
-            &[1, 2, 3],
-            &["col", "col", "col"],
-        );
+        let batch1 = make_stac_batch(&["a", "b", "c"], &[1, 2, 3], &["col", "col", "col"]);
         let schema = batch1.schema();
-        let client1 = MockClient { batches: vec![batch1], schema: schema.clone() };
+        let client1 = MockClient {
+            batches: vec![batch1],
+            schema: schema.clone(),
+        };
         ingest_stac_search(&client1, Search::default(), Arc::clone(&store), 100, &[])
             .await
             .unwrap();
 
         // Second ingest: 2 more rows — chunk_size param is ignored, uses existing chunk_size=100
-        let batch2 = make_stac_batch(
-            &["d", "e"],
-            &[4, 5],
-            &["col", "col"],
-        );
-        let client2 = MockClient { batches: vec![batch2], schema };
+        let batch2 = make_stac_batch(&["d", "e"], &[4, 5], &["col", "col"]);
+        let client2 = MockClient {
+            batches: vec![batch2],
+            schema,
+        };
         let rows = ingest_stac_search(&client2, Search::default(), Arc::clone(&store), 999, &[])
             .await
             .unwrap();
 
         assert_eq!(rows, 2);
 
-        let id_arr = Array::async_open(Arc::clone(&store), "/meta/id").await.unwrap();
+        let id_arr = Array::async_open(Arc::clone(&store), "/meta/id")
+            .await
+            .unwrap();
         assert_eq!(id_arr.shape(), &[5u64]);
         let ids: Vec<String> = id_arr
-            .async_retrieve_array_subset_elements(&ArraySubset::new_with_shape(vec![5u64]))
+            .async_retrieve_array_subset(&ArraySubset::new_with_shape(vec![5u64]))
             .await
             .unwrap();
         assert_eq!(ids, vec!["a", "b", "c", "d", "e"]);
@@ -1059,7 +1132,10 @@ mod tests {
 
         let batch = make_batch_with_assets();
         let schema = batch.schema();
-        let client = MockClient { batches: vec![batch], schema };
+        let client = MockClient {
+            batches: vec![batch],
+            schema,
+        };
 
         let rows = ingest_stac_search(
             &client,
@@ -1077,16 +1153,19 @@ mod tests {
             .await
             .unwrap();
         let hrefs: Vec<String> = b01_arr
-            .async_retrieve_array_subset_elements(&ArraySubset::new_with_shape(vec![2u64]))
+            .async_retrieve_array_subset(&ArraySubset::new_with_shape(vec![2u64]))
             .await
             .unwrap();
-        assert_eq!(hrefs, vec!["s3://bucket/b01_0.tif", "s3://bucket/b01_1.tif"]);
+        assert_eq!(
+            hrefs,
+            vec!["s3://bucket/b01_0.tif", "s3://bucket/b01_1.tif"]
+        );
 
         let thumb_arr = Array::async_open(Arc::clone(&store), "/meta/asset_thumbnail")
             .await
             .unwrap();
         let thumbs: Vec<String> = thumb_arr
-            .async_retrieve_array_subset_elements(&ArraySubset::new_with_shape(vec![2u64]))
+            .async_retrieve_array_subset(&ArraySubset::new_with_shape(vec![2u64]))
             .await
             .unwrap();
         assert_eq!(thumbs, vec!["s3://bucket/thumb_0.jpg", ""]);
@@ -1103,8 +1182,7 @@ mod tests {
     #[tokio::test]
     async fn test_detect_empty_store_returns_zero_row_count() {
         let (store, _dir) = make_test_store().await;
-        let (row_count, eff_chunk_size) =
-            detect_existing_store(store, "/meta", 500).await.unwrap();
+        let (row_count, eff_chunk_size) = detect_existing_store(store, "/meta", 500).await.unwrap();
         assert_eq!(row_count, 0);
         assert_eq!(eff_chunk_size, 500); // uses provided chunk_size when store is empty
     }
@@ -1138,15 +1216,13 @@ mod tests {
         .build(Arc::clone(&store), "/meta/count")
         .unwrap();
         arr.async_store_metadata().await.unwrap();
-        arr.async_store_array_subset(
-            &ArraySubset::new_with_shape(vec![300u64]),
-            &vec![0i64; 300],
-        )
-        .await
-        .unwrap();
+        arr.async_store_array_subset(&ArraySubset::new_with_shape(vec![300u64]), &vec![0i64; 300])
+            .await
+            .unwrap();
 
-        let (row_count, eff_chunk_size) =
-            detect_existing_store(Arc::clone(&store), "/meta", 999).await.unwrap();
+        let (row_count, eff_chunk_size) = detect_existing_store(Arc::clone(&store), "/meta", 999)
+            .await
+            .unwrap();
         assert_eq!(row_count, 300);
         assert_eq!(eff_chunk_size, 100); // uses existing chunk_size, not provided 999
     }
@@ -1177,15 +1253,19 @@ mod tests {
 
         let assets_struct = StructArray::from(vec![
             (
-                Arc::new(Field::new("B01", DataType::Struct(Fields::from(vec![
-                    Field::new("href", DataType::Utf8, true),
-                ])), true)),
+                Arc::new(Field::new(
+                    "B01",
+                    DataType::Struct(Fields::from(vec![Field::new("href", DataType::Utf8, true)])),
+                    true,
+                )),
                 Arc::new(b01_struct) as Arc<dyn ArrowArray>,
             ),
             (
-                Arc::new(Field::new("thumbnail", DataType::Struct(Fields::from(vec![
-                    Field::new("href", DataType::Utf8, true),
-                ])), true)),
+                Arc::new(Field::new(
+                    "thumbnail",
+                    DataType::Struct(Fields::from(vec![Field::new("href", DataType::Utf8, true)])),
+                    true,
+                )),
                 Arc::new(thumb_struct) as Arc<dyn ArrowArray>,
             ),
         ]);
@@ -1213,7 +1293,10 @@ mod tests {
     fn test_extract_asset_hrefs_present_key() {
         let batch = make_batch_with_assets();
         let result = extract_asset_hrefs(&batch, &["B01"]);
-        assert_eq!(result["B01"], vec!["s3://bucket/b01_0.tif", "s3://bucket/b01_1.tif"]);
+        assert_eq!(
+            result["B01"],
+            vec!["s3://bucket/b01_0.tif", "s3://bucket/b01_1.tif"]
+        );
     }
 
     #[test]
@@ -1236,14 +1319,18 @@ mod tests {
 
         // Create groups
         let root = Group::new_with_metadata(
-            Arc::clone(&store), "/",
+            Arc::clone(&store),
+            "/",
             GroupMetadata::V3(GroupMetadataV3::default()),
-        ).unwrap();
+        )
+        .unwrap();
         root.async_store_metadata().await.unwrap();
         let meta = Group::new_with_metadata(
-            Arc::clone(&store), "/meta",
+            Arc::clone(&store),
+            "/meta",
             GroupMetadata::V3(GroupMetadataV3::default()),
-        ).unwrap();
+        )
+        .unwrap();
         meta.async_store_metadata().await.unwrap();
 
         let data = vec![10i64, 20, 30, 40, 50];
@@ -1267,7 +1354,7 @@ mod tests {
             .unwrap();
         assert_eq!(arr.shape(), &[5u64]);
         let read_back: Vec<i64> = arr
-            .async_retrieve_array_subset_elements(&ArraySubset::new_with_shape(vec![5u64]))
+            .async_retrieve_array_subset(&ArraySubset::new_with_shape(vec![5u64]))
             .await
             .unwrap();
         assert_eq!(read_back, data);
@@ -1278,14 +1365,18 @@ mod tests {
         let (store, _dir) = make_test_store().await;
 
         let root = Group::new_with_metadata(
-            Arc::clone(&store), "/",
+            Arc::clone(&store),
+            "/",
             GroupMetadata::V3(GroupMetadataV3::default()),
-        ).unwrap();
+        )
+        .unwrap();
         root.async_store_metadata().await.unwrap();
         let meta = Group::new_with_metadata(
-            Arc::clone(&store), "/meta",
+            Arc::clone(&store),
+            "/meta",
             GroupMetadata::V3(GroupMetadataV3::default()),
-        ).unwrap();
+        )
+        .unwrap();
         meta.async_store_metadata().await.unwrap();
 
         // First write: 3 rows
@@ -1295,7 +1386,9 @@ mod tests {
             "/meta/val",
             &initial_col,
             &ArrowDataType::Int64,
-            0, 0, 200,
+            0,
+            0,
+            200,
         )
         .await
         .unwrap();
@@ -1307,8 +1400,8 @@ mod tests {
             "/meta/val",
             &append_col,
             &ArrowDataType::Int64,
-            3,   // write_offset = existing row count
-            3,   // existing_row_count
+            3, // write_offset = existing row count
+            3, // existing_row_count
             200,
         )
         .await
@@ -1319,7 +1412,7 @@ mod tests {
             .unwrap();
         assert_eq!(arr.shape(), &[5u64]);
         let read_back: Vec<i64> = arr
-            .async_retrieve_array_subset_elements(&ArraySubset::new_with_shape(vec![5u64]))
+            .async_retrieve_array_subset(&ArraySubset::new_with_shape(vec![5u64]))
             .await
             .unwrap();
         assert_eq!(read_back, vec![1i64, 2, 3, 4, 5]);
@@ -1329,7 +1422,7 @@ mod tests {
     async fn test_ingest_proj_transform_writes_zero_valued_columns() {
         // Verifies that transform columns with all-zero values (rotation coefficients)
         // are actually written and readable, not skipped due to fill-value optimization.
-        use arrow_array::{builder::ListBuilder, Float64Array as F64Array};
+        use arrow_array::{Float64Array as F64Array, builder::ListBuilder};
 
         let (store, _dir) = make_test_store().await;
 
@@ -1357,11 +1450,7 @@ mod tests {
 
         let schema = Arc::new(Schema::new(vec![
             Field::new("id", DataType::Utf8, false),
-            Field::new(
-                "proj:transform",
-                transform_col.data_type().clone(),
-                true,
-            ),
+            Field::new("proj:transform", transform_col.data_type().clone(), true),
         ]));
 
         let batch = RecordBatch::try_new(
@@ -1378,23 +1467,17 @@ mod tests {
             schema,
         };
 
-        let rows = ingest_stac_search(
-            &client,
-            Search::default(),
-            Arc::clone(&store),
-            100,
-            &[],
-        )
-        .await
-        .unwrap();
+        let rows = ingest_stac_search(&client, Search::default(), Arc::clone(&store), 100, &[])
+            .await
+            .unwrap();
         assert_eq!(rows, 2);
 
         // Verify ALL transform columns are written and readable, including the all-zero ones.
         for (col_name, expected) in [
             ("transform_0", vec![10.0, 20.0]),
-            ("transform_1", vec![0.0, 0.0]),   // rotation — all zeros
+            ("transform_1", vec![0.0, 0.0]), // rotation — all zeros
             ("transform_2", vec![399960.0, 500000.0]),
-            ("transform_3", vec![0.0, 0.0]),   // rotation — all zeros
+            ("transform_3", vec![0.0, 0.0]), // rotation — all zeros
             ("transform_4", vec![-10.0, -20.0]),
             ("transform_5", vec![4500000.0, 6000000.0]),
         ] {
@@ -1402,7 +1485,7 @@ mod tests {
                 .await
                 .unwrap_or_else(|_| panic!("Array /meta/{col_name} should exist"));
             let data: Vec<f64> = arr
-                .async_retrieve_array_subset_elements(&ArraySubset::new_with_shape(vec![2u64]))
+                .async_retrieve_array_subset(&ArraySubset::new_with_shape(vec![2u64]))
                 .await
                 .unwrap_or_else(|_| panic!("Failed to read {col_name}"));
             assert_eq!(data, expected, "Mismatch for {col_name}");
@@ -1414,14 +1497,18 @@ mod tests {
         let (store, _dir) = make_test_store().await;
 
         let root = Group::new_with_metadata(
-            Arc::clone(&store), "/",
+            Arc::clone(&store),
+            "/",
             GroupMetadata::V3(GroupMetadataV3::default()),
-        ).unwrap();
+        )
+        .unwrap();
         root.async_store_metadata().await.unwrap();
         let meta = Group::new_with_metadata(
-            Arc::clone(&store), "/meta",
+            Arc::clone(&store),
+            "/meta",
             GroupMetadata::V3(GroupMetadataV3::default()),
-        ).unwrap();
+        )
+        .unwrap();
         meta.async_store_metadata().await.unwrap();
 
         // New column in a store with existing_row_count=3, writing 2 new rows
@@ -1431,8 +1518,8 @@ mod tests {
             "/meta/new_col",
             &col,
             &ArrowDataType::Int64,
-            3,   // write_offset starts after the existing rows
-            3,   // existing_row_count = 3, so rows [0,3) will be fill values
+            3, // write_offset starts after the existing rows
+            3, // existing_row_count = 3, so rows [0,3) will be fill values
             200,
         )
         .await
@@ -1443,7 +1530,7 @@ mod tests {
             .unwrap();
         assert_eq!(arr.shape(), &[5u64]); // 3 fill + 2 real
         let read_back: Vec<i64> = arr
-            .async_retrieve_array_subset_elements(&ArraySubset::new_with_shape(vec![5u64]))
+            .async_retrieve_array_subset(&ArraySubset::new_with_shape(vec![5u64]))
             .await
             .unwrap();
         // First 3 are fill value (0), last 2 are real data
@@ -1505,15 +1592,9 @@ mod tests {
             schema,
         };
 
-        let rows = ingest_stac_search(
-            &client,
-            Search::default(),
-            Arc::clone(&store),
-            100,
-            &[],
-        )
-        .await
-        .unwrap();
+        let rows = ingest_stac_search(&client, Search::default(), Arc::clone(&store), 100, &[])
+            .await
+            .unwrap();
         assert_eq!(rows, 2);
 
         // Verify bbox array exists and contains valid WKB
@@ -1523,7 +1604,7 @@ mod tests {
         assert_eq!(bbox_arr.shape(), &[2u64]);
 
         let wkb_data: Vec<Vec<u8>> = bbox_arr
-            .async_retrieve_array_subset_elements(&ArraySubset::new_with_shape(vec![2u64]))
+            .async_retrieve_array_subset(&ArraySubset::new_with_shape(vec![2u64]))
             .await
             .unwrap();
         assert_eq!(wkb_data.len(), 2);
@@ -1531,13 +1612,18 @@ mod tests {
         assert!(!wkb_data[1].is_empty(), "WKB bytes should not be empty");
 
         // Verify the WKB matches what we'd generate directly from the same bbox
-        let expected_rect = Rect::new(
-            coord! { x: -10.0, y: 35.0 },
-            coord! { x: 30.0, y: 60.0 },
-        );
+        let expected_rect = Rect::new(coord! { x: -10.0, y: 35.0 }, coord! { x: 30.0, y: 60.0 });
         let expected_polygon: Polygon = expected_rect.into();
         let mut expected_buf = Vec::new();
-        write_polygon(&mut expected_buf, &expected_polygon, &WriteOptions::default()).unwrap();
-        assert_eq!(wkb_data[0], expected_buf, "WKB for row 0 should match expected polygon");
+        write_polygon(
+            &mut expected_buf,
+            &expected_polygon,
+            &WriteOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            wkb_data[0], expected_buf,
+            "WKB for row 0 should match expected polygon"
+        );
     }
 }
