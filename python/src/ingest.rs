@@ -2,6 +2,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use pyo3_async_runtimes::tokio::future_into_py;
+use object_store::local::LocalFileSystem;
+use object_store::ObjectStore;
 use pyo3_object_store::AnyObjectStore;
 use stac::Bbox;
 use stac::api::{Fields, Filter, Items, Search, Sortby};
@@ -9,6 +11,45 @@ use std::sync::Arc;
 use zarrs_storage::AsyncReadableWritableListableStorageTraits;
 
 use zarr_datafusion_search::ingest::ingest_stac_api;
+
+/// Resolve a Python object into an `Arc<dyn ObjectStore>`.
+///
+/// Accepts (in order of precedence):
+/// 1. A raw obstore store (e.g. `obstore.store.S3Store`)
+/// 2. A `zarr.storage.ObjectStore` — extracts its `.store` obstore attribute
+/// 3. A `zarr.storage.LocalStore` — creates a `LocalFileSystem` from `.root`
+/// 4. A `zarr.Group` — unwraps via `.store` and recurses
+fn resolve_object_store(obj: &Bound<'_, PyAny>) -> PyResult<Arc<dyn ObjectStore>> {
+    // 1. Try direct extraction as an obstore store
+    if let Ok(os) = obj.extract::<AnyObjectStore>() {
+        return Ok(os.into_dyn());
+    }
+
+    // 2. Try .store attribute — could be zarr.storage.ObjectStore (wraps obstore)
+    //    or zarr.Group (wraps a zarr store)
+    if let Ok(inner) = obj.getattr("store") {
+        // If .store yields an obstore store, use it directly
+        if let Ok(os) = inner.extract::<AnyObjectStore>() {
+            return Ok(os.into_dyn());
+        }
+        // Otherwise recurse — handles zarr.Group → zarr store → obstore/local
+        return resolve_object_store(&inner);
+    }
+
+    // 3. Try .root attribute (zarr.storage.LocalStore)
+    if let Ok(root) = obj.getattr("root") {
+        let path: String = root.str()?.to_string();
+        let local_fs = LocalFileSystem::new_with_prefix(&path).map_err(|e| {
+            PyValueError::new_err(format!("Invalid local store root '{path}': {e}"))
+        })?;
+        return Ok(Arc::new(local_fs) as Arc<dyn ObjectStore>);
+    }
+
+    Err(PyValueError::new_err(
+        "Unrecognized store type. Expected a zarr.Group, zarr.storage.ObjectStore, \
+         zarr.storage.LocalStore, or an obstore ObjectStore.",
+    ))
+}
 
 // -- Flexible Python input types, following rustac-py's pattern --
 
@@ -145,9 +186,12 @@ pub fn build_search<'py>(
 /// url : str
 ///     Base URL of the STAC API
 ///     (e.g. ``"https://earth-search.aws.element84.com/v1"``).
-/// store : ObjectStore, optional
-///     An ``obstore`` object store to write into. Mutually exclusive with
-///     ``session``.
+/// store : zarr.Group or zarr.storage.ObjectStore or zarr.storage.LocalStore or obstore.store.ObjectStore, optional
+///     A zarr group, zarr store, or obstore object store to write into.
+///     Accepts a ``zarr.Group`` (extracts its underlying store),
+///     a ``zarr.storage.ObjectStore`` (extracts the underlying obstore store),
+///     a ``zarr.storage.LocalStore`` (uses its ``root`` path), or a raw
+///     obstore store directly. Mutually exclusive with ``session``.
 /// session : icechunk.Session, optional
 ///     An Icechunk writable session to write into. Mutually exclusive with
 ///     ``store``.
@@ -198,7 +242,7 @@ pub fn build_search<'py>(
 pub fn ingest_stac_search<'py>(
     py: Python<'py>,
     url: String,
-    store: Option<AnyObjectStore>,
+    store: Option<Bound<'py, PyAny>>,
     session: Option<Bound<'py, PyAny>>,
     intersects: Option<StringOrDict>,
     ids: Option<StringOrList>,
@@ -246,10 +290,18 @@ pub fn ingest_stac_search<'py>(
 
     let icechunk_store =
         icechunk_session.map(|sess| Arc::new(zarrs_icechunk::AsyncIcechunkStore::new(sess)));
+
+    // Resolve the store parameter: accept zarr Groups, zarr stores, or obstore stores.
+    // If a zarr.Group is passed, unwrap to its underlying store first.
+    let resolved_object_store: Option<Arc<dyn ObjectStore>> = match store {
+        Some(ref s) => Some(resolve_object_store(s)?),
+        None => None,
+    };
+
     let zarr_store: Arc<dyn AsyncReadableWritableListableStorageTraits> =
-        match (&icechunk_store, store) {
+        match (&icechunk_store, resolved_object_store) {
             (Some(ic), None) => Arc::clone(ic) as _,
-            (None, Some(s)) => Arc::new(zarrs_object_store::AsyncObjectStore::new(s.into_dyn())),
+            (None, Some(s)) => Arc::new(zarrs_object_store::AsyncObjectStore::new(s)),
             (Some(_), Some(_)) => {
                 return Err(PyValueError::new_err(
                     "Provide either 'store' or 'session', not both",

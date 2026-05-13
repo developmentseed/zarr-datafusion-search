@@ -464,7 +464,6 @@ async fn write_column_to_zarrs(
     Ok(())
 }
 
-/// Ingest STAC search results into a Zarr store's meta group.
 pub async fn ingest_stac_search<C>(
     client: &C,
     search: Search,
@@ -634,8 +633,6 @@ impl ArrowItemsClient for HttpArrowClient {
     }
 }
 
-/// Convenience wrapper: create an [`HttpArrowClient`] and call
-/// [`ingest_stac_search`].
 pub async fn ingest_stac_api(
     url: &str,
     search: Search,

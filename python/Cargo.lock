@@ -7496,6 +7496,7 @@ dependencies = [
  "datafusion",
  "datafusion-ffi",
  "icechunk",
+ "object_store 0.12.5",
  "pyo3",
  "pyo3-async-runtimes",
  "pyo3-object_store",
