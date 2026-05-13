@@ -1,9 +1,9 @@
+use object_store::ObjectStore;
+use object_store::local::LocalFileSystem;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 use pyo3_async_runtimes::tokio::future_into_py;
-use object_store::local::LocalFileSystem;
-use object_store::ObjectStore;
 use pyo3_object_store::AnyObjectStore;
 use stac::Bbox;
 use stac::api::{Fields, Filter, Items, Search, Sortby};
@@ -314,16 +314,9 @@ pub fn ingest_stac_search<'py>(
 
     future_into_py(py, async move {
         let asset_refs: Vec<&str> = asset_href_strings.iter().map(|s| s.as_str()).collect();
-        let rows = ingest_stac_api(
-            &url,
-            search,
-            zarr_store,
-            chunk_size,
-            &asset_refs,
-            max_items,
-        )
-        .await
-        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let rows = ingest_stac_api(&url, search, zarr_store, chunk_size, &asset_refs, max_items)
+            .await
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
 
         // Commit icechunk session -- the deserialized session holds a
         // connection to the same backing store, but changes only exist in
