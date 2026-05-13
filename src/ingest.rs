@@ -156,16 +156,14 @@ async fn patch_bytes_fill_value(
     let mut metadata: serde_json::Value = serde_json::from_slice(&metadata_bytes)
         .map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
 
-    if let Some(obj) = metadata.as_object_mut() {
-        if let Some(fv) = obj.get("fill_value") {
-            if fv.is_array() {
+    if let Some(obj) = metadata.as_object_mut()
+        && let Some(fv) = obj.get("fill_value")
+            && fv.is_array() {
                 obj.insert(
                     "fill_value".to_string(),
                     serde_json::Value::String(String::new()),
                 );
             }
-        }
-    }
 
     let patched =
         serde_json::to_vec(&metadata).map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
@@ -522,7 +520,7 @@ where
     let mut rows_written: u64 = 0;
 
     for batch_result in reader {
-        let batch = batch_result.map_err(|e| ZarrDataFusionError::Arrow(e.into()))?;
+        let batch = batch_result.map_err(|e| ZarrDataFusionError::Arrow(e))?;
         pending_rows += batch.num_rows();
         pending_batches.push(batch);
 
@@ -605,11 +603,10 @@ impl ArrowItemsClient for HttpArrowClient {
                     let item = stac::Item::try_from(api_item)
                         .map_err(|e| ZarrDataFusionError::StacSearch(e.to_string()))?;
                     items.push(item);
-                    if let Some(max) = self.max_items {
-                        if items.len() as u64 >= max {
+                    if let Some(max) = self.max_items
+                        && items.len() as u64 >= max {
                             break;
                         }
-                    }
                 }
                 Ok::<_, ZarrDataFusionError>(items)
             })
@@ -725,7 +722,7 @@ fn flatten_list_columns(batch: &RecordBatch) -> ZarrDataFusionResult<RecordBatch
     }
 
     let new_schema = Arc::new(Schema::new(new_fields));
-    RecordBatch::try_new(new_schema, new_columns).map_err(|e| ZarrDataFusionError::Arrow(e))
+    RecordBatch::try_new(new_schema, new_columns).map_err(ZarrDataFusionError::Arrow)
 }
 
 /// Extract each element of a List<Float64> or List<Int64> column into separate Float64 columns.
@@ -866,7 +863,7 @@ async fn flush_pending(
     // Concatenate all pending batches into one
     let schema = pending_batches[0].schema();
     let combined = arrow::compute::concat_batches(&schema, pending_batches.iter())
-        .map_err(|e| ZarrDataFusionError::Arrow(e))?;
+        .map_err(ZarrDataFusionError::Arrow)?;
 
     let flush_batch = combined.slice(0, flush_count);
     let remainder = if combined.num_rows() > flush_count {
