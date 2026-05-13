@@ -36,10 +36,9 @@ def ingest_stac_search(
     Args:
         url: Base URL of the STAC API
             (e.g. ``"https://earth-search.aws.element84.com/v1"``).
-        store: A ``zarr.Group`` (root group) to write into. The group's
-            underlying store (``zarr.storage.ObjectStore`` or
-            ``zarr.storage.LocalStore``) is extracted automatically.
-            Mutually exclusive with ``session``.
+        store: An obstore object store (e.g. ``obstore.store.LocalStore``,
+            ``obstore.store.S3Store``) pointing at the root of the Zarr
+            store. Mutually exclusive with ``session``.
         session: An Icechunk writable session to write into. Mutually exclusive
             with ``store``.
         intersects: GeoJSON geometry (as a string or dict) to filter items by
@@ -70,13 +69,13 @@ def ingest_stac_search(
 
     Example:
         ```python
-        import zarr
+        from obstore.store import LocalStore
         from zarr_datafusion_search import ingest_stac_search
 
-        root = zarr.open_group("./my_store.zarr", mode="w")
+        store = LocalStore("./my_store.zarr")
         rows = await ingest_stac_search(
             "https://earth-search.aws.element84.com/v1",
-            store=root,
+            store=store,
             collections="sentinel-2-l2a",
             bbox=[-105, 40, -104, 41],
             max_items=100,
