@@ -1,10 +1,9 @@
+import geodatafusion
 import icechunk
 import pytest
 from datafusion import SessionContext
 from obstore.store import LocalStore
 from zarr_datafusion_search import ZarrTable
-
-geodatafusion = pytest.importorskip("geodatafusion", reason="geodatafusion not installed")
 
 
 @pytest.mark.asyncio
