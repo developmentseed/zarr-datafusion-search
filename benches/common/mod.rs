@@ -19,9 +19,8 @@ use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
 use zarrs::array::codec::{BloscCodec, BloscCompressionLevel, BloscCompressor, BloscShuffleMode};
-use zarrs::array::{ArrayBuilder, DataType, FillValue};
-use zarrs::array_subset::ArraySubset;
-use zarrs::metadata_ext::data_type::NumpyTimeUnit;
+use zarrs::array::data_type::{self, NumpyTimeUnit};
+use zarrs::array::{ArrayBuilder, ArraySubset, BytesToBytesCodecTraits, FillValue};
 use zarrs::storage::AsyncReadableStorageTraits;
 use zarrs_icechunk::AsyncIcechunkStore;
 
@@ -110,7 +109,7 @@ fn generate_icechunk_store(
     let chunk_shape = vec![CHUNK_SIZE];
 
     if arrays.contains(&ArraysToGenerate::Datetime) {
-        let date_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
+        let date_blosc_codec: Arc<dyn BytesToBytesCodecTraits> = Arc::new(
             BloscCodec::new(
                 BloscCompressor::Zstd,
                 BloscCompressionLevel::try_from(9).unwrap(),
@@ -124,10 +123,7 @@ fn generate_icechunk_store(
         let date_array = ArrayBuilder::new(
             array_shape.clone(),
             chunk_shape.clone(),
-            DataType::NumpyDateTime64 {
-                unit: NumpyTimeUnit::Millisecond,
-                scale_factor: 1.try_into().unwrap(),
-            },
+            data_type::numpy_datetime64(NumpyTimeUnit::Millisecond, 1.try_into().unwrap()),
             FillValue::from(0i64),
         )
         .bytes_to_bytes_codecs(vec![date_blosc_codec])
@@ -135,7 +131,7 @@ fn generate_icechunk_store(
 
         rt.block_on(date_array.async_store_metadata())?;
 
-        rt.block_on(date_array.async_store_array_subset_elements(
+        rt.block_on(date_array.async_store_array_subset(
             &ArraySubset::new_with_shape(array_shape.clone()),
             &date_data,
         ))?;
@@ -144,7 +140,7 @@ fn generate_icechunk_store(
     if arrays.contains(&ArraysToGenerate::Bbox) {
         let bbox_data = generate_wkb_polygons(array_shape[0] as usize);
 
-        let bbox_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
+        let bbox_blosc_codec: Arc<dyn BytesToBytesCodecTraits> = Arc::new(
             BloscCodec::new(
                 BloscCompressor::LZ4,
                 BloscCompressionLevel::try_from(3).unwrap(),
@@ -158,7 +154,7 @@ fn generate_icechunk_store(
         let bbox_array = ArrayBuilder::new(
             array_shape.clone(),
             chunk_shape.clone(),
-            DataType::Bytes,
+            data_type::bytes(),
             FillValue::from(vec![]),
         )
         .bytes_to_bytes_codecs(vec![bbox_blosc_codec])
@@ -166,7 +162,7 @@ fn generate_icechunk_store(
 
         rt.block_on(bbox_array.async_store_metadata())?;
 
-        rt.block_on(bbox_array.async_store_array_subset_elements(
+        rt.block_on(bbox_array.async_store_array_subset(
             &ArraySubset::new_with_shape(array_shape.clone()),
             &bbox_data,
         ))?;
@@ -175,7 +171,7 @@ fn generate_icechunk_store(
     if arrays.contains(&ArraysToGenerate::BboxColumns) {
         let (xmin, xmax, ymin, ymax) = generate_bbox_columns(array_shape[0] as usize);
 
-        let f64_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
+        let f64_blosc_codec: Arc<dyn BytesToBytesCodecTraits> = Arc::new(
             BloscCodec::new(
                 BloscCompressor::Zstd,
                 BloscCompressionLevel::try_from(9).unwrap(),
@@ -190,65 +186,65 @@ fn generate_icechunk_store(
         let xmin_array = ArrayBuilder::new(
             array_shape.clone(),
             chunk_shape.clone(),
-            DataType::Float64,
+            data_type::float64(),
             FillValue::from(0.0f64),
         )
         .bytes_to_bytes_codecs(vec![f64_blosc_codec.clone()])
         .build(store.clone(), "/meta/xmin")?;
 
         rt.block_on(xmin_array.async_store_metadata())?;
-        rt.block_on(xmin_array.async_store_array_subset_elements(
-            &ArraySubset::new_with_shape(array_shape.clone()),
-            &xmin,
-        ))?;
+        rt.block_on(
+            xmin_array
+                .async_store_array_subset(&ArraySubset::new_with_shape(array_shape.clone()), &xmin),
+        )?;
 
         // Create and store xmax array
         let xmax_array = ArrayBuilder::new(
             array_shape.clone(),
             chunk_shape.clone(),
-            DataType::Float64,
+            data_type::float64(),
             FillValue::from(0.0f64),
         )
         .bytes_to_bytes_codecs(vec![f64_blosc_codec.clone()])
         .build(store.clone(), "/meta/xmax")?;
 
         rt.block_on(xmax_array.async_store_metadata())?;
-        rt.block_on(xmax_array.async_store_array_subset_elements(
-            &ArraySubset::new_with_shape(array_shape.clone()),
-            &xmax,
-        ))?;
+        rt.block_on(
+            xmax_array
+                .async_store_array_subset(&ArraySubset::new_with_shape(array_shape.clone()), &xmax),
+        )?;
 
         // Create and store ymin array
         let ymin_array = ArrayBuilder::new(
             array_shape.clone(),
             chunk_shape.clone(),
-            DataType::Float64,
+            data_type::float64(),
             FillValue::from(0.0f64),
         )
         .bytes_to_bytes_codecs(vec![f64_blosc_codec.clone()])
         .build(store.clone(), "/meta/ymin")?;
 
         rt.block_on(ymin_array.async_store_metadata())?;
-        rt.block_on(ymin_array.async_store_array_subset_elements(
-            &ArraySubset::new_with_shape(array_shape.clone()),
-            &ymin,
-        ))?;
+        rt.block_on(
+            ymin_array
+                .async_store_array_subset(&ArraySubset::new_with_shape(array_shape.clone()), &ymin),
+        )?;
 
         // Create and store ymax array
         let ymax_array = ArrayBuilder::new(
             array_shape.clone(),
             chunk_shape.clone(),
-            DataType::Float64,
+            data_type::float64(),
             FillValue::from(0.0f64),
         )
         .bytes_to_bytes_codecs(vec![f64_blosc_codec])
         .build(store.clone(), "/meta/ymax")?;
 
         rt.block_on(ymax_array.async_store_metadata())?;
-        rt.block_on(ymax_array.async_store_array_subset_elements(
-            &ArraySubset::new_with_shape(array_shape.clone()),
-            &ymax,
-        ))?;
+        rt.block_on(
+            ymax_array
+                .async_store_array_subset(&ArraySubset::new_with_shape(array_shape.clone()), &ymax),
+        )?;
     }
     if arrays.contains(&ArraysToGenerate::RtreeIndex) {
         let index_group = zarrs::group::GroupBuilder::new().build(store.clone(), "/indexes")?;
@@ -276,7 +272,7 @@ fn generate_icechunk_store(
             rtree_bytes.len() as f64 / 1_048_576.0
         );
 
-        let rtree_blosc_codec: Arc<dyn zarrs::array::codec::BytesToBytesCodecTraits> = Arc::new(
+        let rtree_blosc_codec: Arc<dyn BytesToBytesCodecTraits> = Arc::new(
             BloscCodec::new(
                 BloscCompressor::LZ4,
                 BloscCompressionLevel::try_from(3).unwrap(),
@@ -290,14 +286,14 @@ fn generate_icechunk_store(
         let rtree_array = ArrayBuilder::new(
             vec![rtree_bytes.len() as u64],
             vec![rtree_bytes.len() as u64], // Single chunk
-            DataType::UInt8,
+            data_type::uint8(),
             FillValue::from(0u8),
         )
         .bytes_to_bytes_codecs(vec![rtree_blosc_codec])
         .build(store.clone(), "/indexes/bbox")?;
 
         rt.block_on(rtree_array.async_store_metadata())?;
-        rt.block_on(rtree_array.async_store_array_subset_elements(
+        rt.block_on(rtree_array.async_store_array_subset(
             &ArraySubset::new_with_shape(vec![rtree_bytes.len() as u64]),
             rtree_bytes.as_slice(),
         ))?;
