@@ -47,6 +47,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 # Directories to search for tests
 testpaths = [
     "tests",

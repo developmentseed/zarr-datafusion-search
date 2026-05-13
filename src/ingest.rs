@@ -954,8 +954,7 @@ mod tests {
     use stac::api::RecordBatchReaderAdapter;
     use stac::api::{ArrowItemsClient, Search};
     use tempfile::TempDir;
-    use zarrs::array::{Array, ArrayBuilder, FillValue, data_type};
-    use zarrs::array::{ArraySubset, ChunkShapeTraits};
+    use zarrs::array::{Array, ArrayBuilder, ArraySubset, FillValue, data_type};
     use zarrs::group::{GroupMetadata, GroupMetadataV3};
 
     struct MockClient {
@@ -1420,7 +1419,7 @@ mod tests {
     async fn test_ingest_proj_transform_writes_zero_valued_columns() {
         // Verifies that transform columns with all-zero values (rotation coefficients)
         // are actually written and readable, not skipped due to fill-value optimization.
-        use arrow_array::{Float64Array as F64Array, builder::ListBuilder};
+        use arrow_array::builder::ListBuilder;
 
         let (store, _dir) = make_test_store().await;
 
