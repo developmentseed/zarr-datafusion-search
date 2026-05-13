@@ -79,6 +79,7 @@ impl From<StringOrList> for Vec<String> {
 // -- Search builder (adapted from rustac-py) --
 
 /// Builds a [`Search`] from Python arguments.
+#[allow(clippy::too_many_arguments)]
 pub fn build_search<'py>(
     py: Python<'py>,
     intersects: Option<StringOrDict>,

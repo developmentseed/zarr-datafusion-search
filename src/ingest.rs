@@ -90,8 +90,8 @@ pub(crate) fn extract_asset_hrefs(
 
     for key in asset_keys {
         let hrefs = result.get_mut(*key).unwrap();
-        for row in 0..num_rows {
-            hrefs[row] = extract_href_from_assets(assets_struct, key, row);
+        for (row, href) in hrefs.iter_mut().enumerate().take(num_rows) {
+            *href = extract_href_from_assets(assets_struct, key, row);
         }
     }
 
@@ -253,6 +253,7 @@ async fn write_column_to_zarrs(
         patch_bytes_fill_value(store.as_ref(), array_path).await?;
     }
 
+    #[allow(clippy::single_range_in_vec_init)]
     let subset = ArraySubset::new_with_ranges(&[write_offset..(write_offset + num_rows)]);
 
     // Dispatch write by Arrow type, converting nulls → fill values
@@ -521,7 +522,7 @@ where
     let mut rows_written: u64 = 0;
 
     for batch_result in reader {
-        let batch = batch_result.map_err(|e| ZarrDataFusionError::Arrow(e))?;
+        let batch = batch_result.map_err(ZarrDataFusionError::Arrow)?;
         pending_rows += batch.num_rows();
         pending_batches.push(batch);
 
@@ -851,6 +852,7 @@ fn bbox_struct_to_wkb(
 
 /// Concatenate pending batches, flush `flush_count` rows, keep the remainder.
 /// Returns the number of rows flushed.
+#[allow(clippy::too_many_arguments)]
 async fn flush_pending(
     store: Arc<dyn AsyncReadableWritableListableStorageTraits>,
     group_path: &str,
