@@ -252,9 +252,7 @@ pub fn ingest_stac_search<'py>(
     let zarr_store: Arc<dyn AsyncReadableWritableListableStorageTraits> =
         match (&icechunk_store, store) {
             (Some(ic), None) => Arc::clone(ic) as _,
-            (None, Some(s)) => {
-                Arc::new(zarrs_object_store::AsyncObjectStore::new(s.into_dyn()))
-            }
+            (None, Some(s)) => Arc::new(zarrs_object_store::AsyncObjectStore::new(s.into_dyn())),
             (Some(_), Some(_)) => {
                 return Err(PyValueError::new_err(
                     "Provide either 'store' or 'session', not both",
