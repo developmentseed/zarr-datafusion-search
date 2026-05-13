@@ -12,32 +12,33 @@ use zarrs_storage::AsyncReadableWritableListableStorageTraits;
 
 use zarr_datafusion_search::ingest::ingest_stac_api;
 
-/// Resolve a Python object into an `Arc<dyn ObjectStore>`.
+/// Extract an `Arc<dyn ObjectStore>` from a `zarr.Group`.
 ///
-/// Accepts (in order of precedence):
-/// 1. A raw obstore store (e.g. `obstore.store.S3Store`)
-/// 2. A `zarr.storage.ObjectStore` — extracts its `.store` obstore attribute
-/// 3. A `zarr.storage.LocalStore` — creates a `LocalFileSystem` from `.root`
-/// 4. A `zarr.Group` — unwraps via `.store` and recurses
-fn resolve_object_store(obj: &Bound<'_, PyAny>) -> PyResult<Arc<dyn ObjectStore>> {
-    // 1. Try direct extraction as an obstore store
-    if let Ok(os) = obj.extract::<AnyObjectStore>() {
-        return Ok(os.into_dyn());
-    }
+/// Walks the chain: `zarr.Group` → `.store` (zarr store) → underlying storage.
+/// The zarr store is either:
+/// - `zarr.storage.ObjectStore` — has `.store` yielding an obstore store
+/// - `zarr.storage.LocalStore` — has `.root` yielding a filesystem path
+fn resolve_zarr_group(group: &Bound<'_, PyAny>) -> PyResult<Arc<dyn ObjectStore>> {
+    let zarr_store = group.getattr("store").map_err(|_| {
+        PyValueError::new_err(
+            "Expected a zarr.Group (must have a .store attribute). \
+             Pass the root group of your zarr store.",
+        )
+    })?;
+    resolve_zarr_store(&zarr_store)
+}
 
-    // 2. Try .store attribute — could be zarr.storage.ObjectStore (wraps obstore)
-    //    or zarr.Group (wraps a zarr store)
-    if let Ok(inner) = obj.getattr("store") {
-        // If .store yields an obstore store, use it directly
+/// Resolve a zarr store into an `Arc<dyn ObjectStore>`.
+fn resolve_zarr_store(store: &Bound<'_, PyAny>) -> PyResult<Arc<dyn ObjectStore>> {
+    // zarr.storage.ObjectStore — has .store containing an obstore store
+    if let Ok(inner) = store.getattr("store") {
         if let Ok(os) = inner.extract::<AnyObjectStore>() {
             return Ok(os.into_dyn());
         }
-        // Otherwise recurse — handles zarr.Group → zarr store → obstore/local
-        return resolve_object_store(&inner);
     }
 
-    // 3. Try .root attribute (zarr.storage.LocalStore)
-    if let Ok(root) = obj.getattr("root") {
+    // zarr.storage.LocalStore — has .root containing a filesystem path
+    if let Ok(root) = store.getattr("root") {
         let path: String = root.str()?.to_string();
         let local_fs = LocalFileSystem::new_with_prefix(&path).map_err(|e| {
             PyValueError::new_err(format!("Invalid local store root '{path}': {e}"))
@@ -46,8 +47,8 @@ fn resolve_object_store(obj: &Bound<'_, PyAny>) -> PyResult<Arc<dyn ObjectStore>
     }
 
     Err(PyValueError::new_err(
-        "Unrecognized store type. Expected a zarr.Group, zarr.storage.ObjectStore, \
-         zarr.storage.LocalStore, or an obstore ObjectStore.",
+        "Unsupported zarr store type. The group's store must be a \
+         zarr.storage.ObjectStore or zarr.storage.LocalStore.",
     ))
 }
 
@@ -180,22 +181,20 @@ pub fn build_search<'py>(
 ///
 /// Queries a STAC API, converts matching items to Arrow, and writes them as
 /// 1-D Zarr arrays under the ``/meta`` group. Supports both
-/// ``obstore``-backed stores and Icechunk sessions.
+/// zarr group-backed stores and Icechunk sessions.
 ///
 /// Parameters
 /// ----------
 /// url : str
 ///     Base URL of the STAC API
 ///     (e.g. ``"https://earth-search.aws.element84.com/v1"``).
-/// store : zarr.Group or zarr.storage.ObjectStore or zarr.storage.LocalStore or obstore.store.ObjectStore, optional
-///     A zarr group, zarr store, or obstore object store to write into.
-///     Accepts a ``zarr.Group`` (extracts its underlying store),
-///     a ``zarr.storage.ObjectStore`` (extracts the underlying obstore store),
-///     a ``zarr.storage.LocalStore`` (uses its ``root`` path), or a raw
-///     obstore store directly. Mutually exclusive with ``session``.
+/// store : zarr.Group, optional
+///     A zarr root group to write into. The group's underlying store
+///     (``zarr.storage.ObjectStore`` or ``zarr.storage.LocalStore``) is
+///     extracted automatically. Mutually exclusive with ``session``.
 /// session : icechunk.Session, optional
 ///     An Icechunk writable session to write into. Mutually exclusive with
-///     ``store``.
+///     ``group``.
 /// intersects : str or dict, optional
 ///     GeoJSON geometry (as a string or dict) to filter items by spatial
 ///     intersection.
@@ -292,10 +291,8 @@ pub fn ingest_stac_search<'py>(
     let icechunk_store =
         icechunk_session.map(|sess| Arc::new(zarrs_icechunk::AsyncIcechunkStore::new(sess)));
 
-    // Resolve the store parameter: accept zarr Groups, zarr stores, or obstore stores.
-    // If a zarr.Group is passed, unwrap to its underlying store first.
     let resolved_object_store: Option<Arc<dyn ObjectStore>> = match store {
-        Some(ref s) => Some(resolve_object_store(s)?),
+        Some(ref g) => Some(resolve_zarr_group(g)?),
         None => None,
     };
 

@@ -31,16 +31,15 @@ def ingest_stac_search(
 
     Queries a STAC API, converts matching items to Arrow, and writes them as
     1-D Zarr arrays under the ``/meta`` group. Supports both
-    ``obstore``-backed stores and Icechunk sessions.
+    zarr group-backed stores and Icechunk sessions.
 
     Args:
         url: Base URL of the STAC API
             (e.g. ``"https://earth-search.aws.element84.com/v1"``).
-        store: A zarr group, zarr store, or obstore object store to write into.
-            Accepts a ``zarr.Group`` (extracts its underlying store),
-            a ``zarr.storage.ObjectStore`` (extracts the underlying obstore store),
-            a ``zarr.storage.LocalStore`` (uses its ``root`` path), or a raw
-            obstore store directly. Mutually exclusive with ``session``.
+        store: A ``zarr.Group`` (root group) to write into. The group's
+            underlying store (``zarr.storage.ObjectStore`` or
+            ``zarr.storage.LocalStore``) is extracted automatically.
+            Mutually exclusive with ``session``.
         session: An Icechunk writable session to write into. Mutually exclusive
             with ``store``.
         intersects: GeoJSON geometry (as a string or dict) to filter items by
@@ -71,11 +70,13 @@ def ingest_stac_search(
 
     Example:
         ```python
+        import zarr
         from zarr_datafusion_search import ingest_stac_search
 
+        root = zarr.open_group("./my_store.zarr", mode="w")
         rows = await ingest_stac_search(
             "https://earth-search.aws.element84.com/v1",
-            store=zarr_group,
+            store=root,
             collections="sentinel-2-l2a",
             bbox=[-105, 40, -104, 41],
             max_items=100,
