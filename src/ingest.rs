@@ -158,12 +158,13 @@ async fn patch_bytes_fill_value(
 
     if let Some(obj) = metadata.as_object_mut()
         && let Some(fv) = obj.get("fill_value")
-            && fv.is_array() {
-                obj.insert(
-                    "fill_value".to_string(),
-                    serde_json::Value::String(String::new()),
-                );
-            }
+        && fv.is_array()
+    {
+        obj.insert(
+            "fill_value".to_string(),
+            serde_json::Value::String(String::new()),
+        );
+    }
 
     let patched =
         serde_json::to_vec(&metadata).map_err(|e| ZarrDataFusionError::Custom(e.to_string()))?;
@@ -604,9 +605,10 @@ impl ArrowItemsClient for HttpArrowClient {
                         .map_err(|e| ZarrDataFusionError::StacSearch(e.to_string()))?;
                     items.push(item);
                     if let Some(max) = self.max_items
-                        && items.len() as u64 >= max {
-                            break;
-                        }
+                        && items.len() as u64 >= max
+                    {
+                        break;
+                    }
                 }
                 Ok::<_, ZarrDataFusionError>(items)
             })
