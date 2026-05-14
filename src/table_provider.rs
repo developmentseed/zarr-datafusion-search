@@ -282,7 +282,7 @@ struct ZarrExec {
     filters: Vec<Expr>,
     group_path: String,
     indexes: HashMap<String, Vec<u8>>,
-    properties: PlanProperties,
+    properties: Arc<PlanProperties>,
 }
 
 impl ZarrExec {
@@ -294,12 +294,12 @@ impl ZarrExec {
         group_path: String,
         indexes: HashMap<String, Vec<u8>>,
     ) -> Self {
-        let properties = PlanProperties::new(
+        let properties = Arc::new(PlanProperties::new(
             EquivalenceProperties::new(projected_schema.clone()),
             Partitioning::UnknownPartitioning(1),
             EmissionType::Final,
             Boundedness::Bounded,
-        );
+        ));
         Self {
             zarr_backend,
             table_schema,
@@ -330,7 +330,7 @@ impl ExecutionPlan for ZarrExec {
     fn schema(&self) -> SchemaRef {
         self.projected_schema.clone()
     }
-    fn properties(&self) -> &PlanProperties {
+    fn properties(&self) -> &Arc<PlanProperties> {
         &self.properties
     }
     fn children(&self) -> Vec<&Arc<dyn ExecutionPlan>> {

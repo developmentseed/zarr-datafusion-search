@@ -7,6 +7,7 @@ use zarrs_metadata as _;
 use zarrs_storage as _;
 
 pub mod error;
+pub mod ingest;
 pub mod schema;
 pub mod table_provider;
 #[cfg(test)]

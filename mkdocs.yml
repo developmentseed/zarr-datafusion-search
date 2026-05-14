@@ -23,10 +23,11 @@ nav:
       - user-guide/quickstart.md
   - API Reference:
       - api/zarr-table.md
+      - api/ingest.md
   - Examples:
       - examples/quickstart.ipynb
       - examples/spatial_index.ipynb
-      - examples/landsat_virtualizarr.ipynb
+      - examples/stac_virtualizarr.ipynb
   - Architecture:
       - architecture/zarr.md
       - architecture/query-pipeline.md

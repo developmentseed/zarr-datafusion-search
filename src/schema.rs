@@ -5,10 +5,12 @@ use geoarrow_schema::{Crs, WkbType};
 use std::sync::Arc;
 use zarrs::array::Array;
 use zarrs::array::DataType as ZarrDataType;
+use zarrs::array::FillValue;
 use zarrs::array::data_type::{
-    BoolDataType, BytesDataType, Float16DataType, Float32DataType, Float64DataType, Int8DataType,
-    Int16DataType, Int32DataType, Int64DataType, NumpyDateTime64DataType, NumpyTimeUnit,
-    RawBitsDataType, StringDataType, UInt8DataType, UInt16DataType, UInt32DataType, UInt64DataType,
+    self, BoolDataType, BytesDataType, Float16DataType, Float32DataType, Float64DataType,
+    Int8DataType, Int16DataType, Int32DataType, Int64DataType, NumpyDateTime64DataType,
+    NumpyTimeUnit, RawBitsDataType, StringDataType, UInt8DataType, UInt16DataType, UInt32DataType,
+    UInt64DataType,
 };
 use zarrs::group::Group;
 use zarrs::node::NodePath;
@@ -125,6 +127,78 @@ fn zarr_to_arrow_field(name: String, zarr_dtype: &ZarrDataType) -> ZarrDataFusio
     Ok(Arc::new(Field::new(&name, data_type, false)))
 }
 
+/// Map an Arrow DataType to a Zarr DataType for writing.
+/// Returns None for non-scalar types that cannot be stored as 1D Zarr arrays.
+pub(crate) fn arrow_to_zarr_dtype(arrow_type: &DataType) -> Option<ZarrDataType> {
+    match arrow_type {
+        DataType::Boolean => Some(data_type::bool()),
+        DataType::Int8 => Some(data_type::int8()),
+        DataType::Int16 => Some(data_type::int16()),
+        DataType::Int32 => Some(data_type::int32()),
+        DataType::Int64 => Some(data_type::int64()),
+        DataType::UInt8 => Some(data_type::uint8()),
+        DataType::UInt16 => Some(data_type::uint16()),
+        DataType::UInt32 => Some(data_type::uint32()),
+        DataType::UInt64 => Some(data_type::uint64()),
+        DataType::Float32 => Some(data_type::float32()),
+        DataType::Float64 => Some(data_type::float64()),
+        DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => Some(data_type::string()),
+        DataType::Binary | DataType::LargeBinary | DataType::BinaryView => Some(data_type::bytes()),
+        DataType::Timestamp(TimeUnit::Second, _) => Some(data_type::numpy_datetime64(
+            NumpyTimeUnit::Second,
+            std::num::NonZeroU32::new(1).unwrap(),
+        )),
+        DataType::Timestamp(TimeUnit::Millisecond, _) => Some(data_type::numpy_datetime64(
+            NumpyTimeUnit::Millisecond,
+            std::num::NonZeroU32::new(1).unwrap(),
+        )),
+        DataType::Timestamp(TimeUnit::Microsecond, _) => Some(data_type::numpy_datetime64(
+            NumpyTimeUnit::Microsecond,
+            std::num::NonZeroU32::new(1).unwrap(),
+        )),
+        DataType::Timestamp(TimeUnit::Nanosecond, _) => Some(data_type::numpy_datetime64(
+            NumpyTimeUnit::Nanosecond,
+            std::num::NonZeroU32::new(1).unwrap(),
+        )),
+        _ => None,
+    }
+}
+
+/// Return the default Zarr fill value for a given Zarr DataType.
+pub(crate) fn zarr_fill_value(dtype: &ZarrDataType) -> FillValue {
+    if dtype.is::<BoolDataType>() {
+        FillValue::from(false)
+    } else if dtype.is::<Int8DataType>() {
+        FillValue::from(0i8)
+    } else if dtype.is::<Int16DataType>() {
+        FillValue::from(0i16)
+    } else if dtype.is::<Int32DataType>() {
+        FillValue::from(0i32)
+    } else if dtype.is::<Int64DataType>() {
+        FillValue::from(0i64)
+    } else if dtype.is::<UInt8DataType>() {
+        FillValue::from(0u8)
+    } else if dtype.is::<UInt16DataType>() {
+        FillValue::from(0u16)
+    } else if dtype.is::<UInt32DataType>() {
+        FillValue::from(0u32)
+    } else if dtype.is::<UInt64DataType>() {
+        FillValue::from(0u64)
+    } else if dtype.is::<Float32DataType>() {
+        FillValue::from(0.0f32)
+    } else if dtype.is::<Float64DataType>() {
+        FillValue::from(0.0f64)
+    } else if dtype.is::<StringDataType>() {
+        FillValue::from("")
+    } else if dtype.is::<BytesDataType>() {
+        FillValue::from(vec![])
+    } else if dtype.is::<NumpyDateTime64DataType>() {
+        FillValue::from(0i64)
+    } else {
+        FillValue::from(0u8)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -164,5 +238,92 @@ mod tests {
             let expected_schema = Arc::new(Schema::new(expected_fields));
             assert_eq!(&schema, &expected_schema);
         }
+    }
+
+    #[test]
+    fn test_arrow_to_zarr_dtype_scalars() {
+        use arrow_schema::TimeUnit;
+
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Boolean)
+                .unwrap()
+                .is::<BoolDataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Int64)
+                .unwrap()
+                .is::<Int64DataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::UInt32)
+                .unwrap()
+                .is::<UInt32DataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Float64)
+                .unwrap()
+                .is::<Float64DataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Utf8)
+                .unwrap()
+                .is::<StringDataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::LargeUtf8)
+                .unwrap()
+                .is::<StringDataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Utf8View)
+                .unwrap()
+                .is::<StringDataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Binary)
+                .unwrap()
+                .is::<BytesDataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::BinaryView)
+                .unwrap()
+                .is::<BytesDataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Timestamp(TimeUnit::Millisecond, None))
+                .unwrap()
+                .is::<NumpyDateTime64DataType>()
+        );
+        assert!(
+            arrow_to_zarr_dtype(&DataType::Timestamp(TimeUnit::Second, None))
+                .unwrap()
+                .is::<NumpyDateTime64DataType>()
+        );
+    }
+
+    #[test]
+    fn test_arrow_to_zarr_dtype_non_scalar_returns_none() {
+        use arrow_schema::Field;
+        assert!(
+            arrow_to_zarr_dtype(&DataType::List(Arc::new(Field::new(
+                "item",
+                DataType::Int64,
+                true
+            ))))
+            .is_none()
+        );
+        assert!(arrow_to_zarr_dtype(&DataType::Struct(arrow_schema::Fields::empty())).is_none());
+    }
+
+    #[test]
+    fn test_zarr_fill_value_types() {
+        // Just verify it returns without panic for supported types
+        let _ = zarr_fill_value(&data_type::int64());
+        let _ = zarr_fill_value(&data_type::string());
+        let _ = zarr_fill_value(&data_type::bytes());
+        let _ = zarr_fill_value(&data_type::numpy_datetime64(
+            NumpyTimeUnit::Millisecond,
+            std::num::NonZeroU32::new(1).unwrap(),
+        ));
     }
 }

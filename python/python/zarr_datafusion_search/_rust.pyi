@@ -7,6 +7,83 @@ if TYPE_CHECKING:
 
 def ___version() -> str: ...
 
+def ingest_stac_search(
+    url: str,
+    *,
+    store: Any | None = None,
+    session: Any | None = None,
+    intersects: str | dict | None = None,
+    ids: str | list[str] | None = None,
+    collections: str | list[str] | None = None,
+    max_items: int | None = None,
+    limit: int | None = None,
+    bbox: list[float] | None = None,
+    datetime: str | None = None,
+    include: str | list[str] | None = None,
+    exclude: str | list[str] | None = None,
+    sortby: str | list[str] | None = None,
+    filter: str | dict | None = None,
+    query: dict | None = None,
+    chunk_size: int = 1000,
+    asset_hrefs: list[str] | None = None,
+) -> Awaitable[int]:
+    """Ingest STAC API search results into a Zarr store.
+
+    Queries a STAC API, converts matching items to Arrow, and writes them as
+    1-D Zarr arrays under the ``/meta`` group. Supports both
+    zarr group-backed stores and Icechunk sessions.
+
+    Args:
+        url: Base URL of the STAC API
+            (e.g. ``"https://earth-search.aws.element84.com/v1"``).
+        store: An obstore object store (e.g. ``obstore.store.LocalStore``,
+            ``obstore.store.S3Store``) pointing at the root of the Zarr
+            store. Mutually exclusive with ``session``.
+        session: An Icechunk writable session to write into. Mutually exclusive
+            with ``store``.
+        intersects: GeoJSON geometry (as a string or dict) to filter items by
+            spatial intersection.
+        ids: One or more STAC item IDs to fetch.
+        collections: One or more collection IDs to search within.
+        max_items: Maximum number of items to ingest. When ``None``, all
+            matching items are fetched.
+        limit: Page size for the STAC API search request.
+        bbox: Bounding box filter as ``[west, south, east, north]``.
+        datetime: Datetime filter as a single datetime or a ``/``-separated
+            range (e.g. ``"2024-01-01/2024-06-01"``).
+        include: Fields to include in the response (STAC API Fields extension).
+        exclude: Fields to exclude from the response (STAC API Fields extension).
+        sortby: Sort order (STAC API Sort extension), e.g. ``"+datetime"`` or
+            ``"-eo:cloud_cover"``.
+        filter: CQL2 filter as a text string or a CQL2-JSON dict (STAC API
+            Filter extension).
+        query: Legacy STAC API query parameters.
+        chunk_size: Number of rows per Zarr chunk for newly created arrays.
+            Ignored when appending to an existing store.
+        asset_hrefs: Asset keys (e.g. ``["B01", "thumbnail"]``) whose ``href``
+            values should be extracted and written as ``/meta/asset_{key}``
+            string arrays.
+
+    Returns:
+        An awaitable that resolves to the number of rows written.
+
+    Example:
+        ```python
+        from obstore.store import LocalStore
+        from zarr_datafusion_search import ingest_stac_search
+
+        store = LocalStore("./my_store.zarr")
+        rows = await ingest_stac_search(
+            "https://earth-search.aws.element84.com/v1",
+            store=store,
+            collections="sentinel-2-l2a",
+            bbox=[-105, 40, -104, 41],
+            max_items=100,
+        )
+        ```
+    """
+    ...
+
 class ZarrTable:
     """A DataFusion table provider that exposes a Zarr metadata store as a SQL-queryable table.
 

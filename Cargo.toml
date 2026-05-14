@@ -4,27 +4,33 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-arrow = "57.0.0"
-arrow-array = "57.0.0"
-arrow-schema = "57.0.0"
+arrow = "58.0.0"
+arrow-array = "58.0.0"
+arrow-schema = "58.0.0"
 async-trait = "0.1.89"
-datafusion = "52.0"
+datafusion = "53.0"
 futures = "0.3.31"
+geo = "0.31"
 geo-index = "0.2"
 geo-traits = "0.3"
-geodatafusion = "0.3"
+geodatafusion = "0.4"
+wkb = "0.9"
 wkt = { version = "0.14", default-features = false }
-geoarrow-schema = "0.7.0"
+geoarrow-schema = "0.8.0"
 icechunk = "0.3.16"
 object_store = "0.12.4"
 thiserror = "2"
-tokio = "1.48"
+tokio = { version = "1.48", features = ["rt"] }
 zarrs = { version = "0.23.10", features = ["async", "chrono"] }
 zarrs_filesystem = "0.3.9"
 zarrs_metadata = "0.7.4"
 zarrs_icechunk = "0.4.2"
 zarrs_object_store = "0.5.0"
 zarrs_storage = { version = "0.4.3", features = ["async"] }
+serde_json = "1"
+stac = { version = "0.17.0", features = ["geoarrow", "async"] }
+stac-io = "0.2.8"
+tracing = "0.1"
 
 [dev-dependencies]
 bytesize = "1"
@@ -33,7 +39,7 @@ criterion = { version = "0.5.1", features = ["async_tokio"] }
 dhat = "0.3"
 geo = "0.31"
 geo-index = "0.2"
-geoarrow-array = "0.7.0"
+geoarrow-array = "0.8.0"
 rand = "0.8"
 tempfile = "3"
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread"] }

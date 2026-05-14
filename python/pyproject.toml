@@ -6,8 +6,7 @@ build-backend = "maturin"
 name = "zarr_datafusion_search"
 requires-python = ">=3.10"
 dependencies = [
-  "datafusion>=52.0",
-  "geodatafusion==0.2.0",
+  "datafusion>=53.0"
 ]
 classifiers = [
     "Programming Language :: Rust",
@@ -23,6 +22,7 @@ python-source = "python"
 
 [tool.uv]
 dev-dependencies = [
+    "geodatafusion",
     "icechunk==1.1.21; python_version >= '3.11'",
     "ipykernel",
     "maturin",
@@ -48,6 +48,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 # Directories to search for tests
 testpaths = [
     "tests",

@@ -1,7 +1,7 @@
+import geodatafusion
 import icechunk
 import pytest
 from datafusion import SessionContext
-from geodatafusion import register_all
 from obstore.store import LocalStore
 from zarr_datafusion_search import ZarrTable
 
@@ -10,7 +10,7 @@ from zarr_datafusion_search import ZarrTable
 async def test_spatial_functions_registered(session_zarr_store):
     """Test that spatial functions work with zarr data."""
     ctx = SessionContext()
-    register_all(ctx)
+    geodatafusion.register_all(ctx)
 
     store = LocalStore(session_zarr_store)
     zarr_table = await ZarrTable.from_obstore(store, "/meta")

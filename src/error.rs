@@ -31,6 +31,9 @@ pub enum ZarrDataFusionError {
 
     #[error("{0}")]
     Custom(String),
+
+    #[error("STAC search error: {0}")]
+    StacSearch(String),
 }
 
 impl From<ZarrDataFusionError> for DataFusionError {

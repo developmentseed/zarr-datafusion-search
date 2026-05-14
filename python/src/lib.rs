@@ -3,6 +3,7 @@
 // Use patched version of zarrs-metadata
 use zarrs_metadata as _;
 
+mod ingest;
 mod table;
 
 use pyo3::prelude::*;
@@ -40,6 +41,7 @@ fn _rust(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_wrapped(wrap_pyfunction!(___version))?;
 
     m.add_class::<table::PyZarrTable>()?;
+    m.add_wrapped(wrap_pyfunction!(ingest::ingest_stac_search))?;
 
     Ok(())
 }
