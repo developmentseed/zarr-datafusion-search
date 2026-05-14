@@ -15,7 +15,7 @@
         <link rel="canonical" href="https://developmentseed.github.io/zarr-datafusion-search/examples/quickstart/">
       
       
-        <link rel="prev" href="../../api/zarr-table/">
+        <link rel="prev" href="../../api/ingest/">
       
       
         <link rel="next" href="../spatial_index/">
@@ -428,6 +428,8 @@
       
         
       
+        
+      
     
     
     
@@ -483,6 +485,34 @@
     
   
     ZarrTable
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/ingest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ingest_stac_search
   
 
     
@@ -710,14 +740,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../landsat_virtualizarr/" class="md-nav__link">
+      <a href="../stac_virtualizarr/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Landsat virtualizarr
+    Stac virtualizarr
   
 
     
@@ -1750,7 +1780,7 @@ warnings.filterwarnings("ignore", category=UnstableSpecificationWarning)</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-2">
@@ -1842,7 +1872,7 @@ bbox[:] = shapely.to_wkb([
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [9]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-3">
@@ -1885,7 +1915,7 @@ ctx.register_table("my_data", zarr_table)</div>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
-<pre>/var/folders/mp/33cxt8xj36bbxj0jqdwbfwyc0000gn/T/ipykernel_85861/1827052559.py:6: RuntimeWarning: Successfully reconstructed a store defined in another Python module. Connection pooling will not be shared across store instances.
+<pre>/var/folders/mp/33cxt8xj36bbxj0jqdwbfwyc0000gn/T/ipykernel_93099/1827052559.py:6: RuntimeWarning: Successfully reconstructed a store defined in another Python module. Connection pooling will not be shared across store instances.
   zarr_table = await ZarrTable.from_obstore(store, "/meta")
 </pre>
 </div>
@@ -1910,7 +1940,7 @@ ctx.register_table("my_data", zarr_table)</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [7]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-4">
@@ -1933,7 +1963,7 @@ ctx.register_table("my_data", zarr_table)</div>
 <span class="s2">    FROM my_data</span>
 <span class="s2">    WHERE date &gt;= '2023-01-02'</span>
 <span class="s2">"""</span><span class="p">)</span>
-<span class="n">df</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+<span class="n">df</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-4">df = ctx.sql("SELECT * FROM my_data")
 print(df.schema())
@@ -1945,7 +1975,7 @@ df = ctx.sql("""
     FROM my_data
     WHERE date &gt;= '2023-01-02'
 """)
-df.show()</div>
+df</div>
 </div>
 </div>
 </div>
@@ -1971,14 +2001,89 @@ DataFrame()
 | 01030000000100000005000000000000000000344000000000000034c00000000000003440000000000000344000000000000034c0000000000000344000000000000034c000000000000034c0000000000000344000000000000034c0 | sentinel-2 | 2023-01-02T00:00:00 |
 | 0103000000010000000500000000000000000049400000000000003e40000000000000494000000000000049400000000000003e4000000000000049400000000000003e400000000000003e4000000000000049400000000000003e40 | landsat-8  | 2023-01-03T00:00:00 |
 +--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------+---------------------+
-DataFrame()
-+---------------------+------------+
-| date                | collection |
-+---------------------+------------+
-| 2023-01-02T00:00:00 | sentinel-2 |
-| 2023-01-03T00:00:00 | landsat-8  |
-+---------------------+------------+
 </pre>
+</div>
+</div>
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[4]:</div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
+<script>
+if (!document.getElementById('df-styles')) {
+  const style = document.createElement('style');
+  style.id = 'df-styles';
+  style.textContent = `
+            .expandable-container {
+                display: inline-block;
+                max-width: 200px;
+            }
+            .expandable {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                display: block;
+            }
+            .full-text {
+                display: none;
+                white-space: normal;
+            }
+            .expand-btn {
+                cursor: pointer;
+                color: blue;
+                text-decoration: underline;
+                border: none;
+                background: none;
+                font-size: inherit;
+                display: block;
+                margin-top: 5px;
+            }
+        `;
+  document.head.appendChild(style);
+}
+</script>
+<div style="width: 100%; max-width: 1000px; max-height: 300px; overflow: auto; border: 1px solid #ccc;">
+<table style="border-collapse: collapse">
+<thead>
+<tr>
+<th style="border: 1px solid black; padding: 8px; text-align: left; background-color: #f2f2f2; white-space: nowrap; min-width: fit-content; max-width: fit-content;">date</th>
+<th style="border: 1px solid black; padding: 8px; text-align: left; background-color: #f2f2f2; white-space: nowrap; min-width: fit-content; max-width: fit-content;">collection</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="border: 1px solid black; padding: 8px; text-align: left; white-space: nowrap;">2023-01-02 00:00:00</td>
+<td style="border: 1px solid black; padding: 8px; text-align: left; white-space: nowrap;">sentinel-2</td>
+</tr>
+<tr>
+<td style="border: 1px solid black; padding: 8px; text-align: left; white-space: nowrap;">2023-01-03 00:00:00</td>
+<td style="border: 1px solid black; padding: 8px; text-align: left; white-space: nowrap;">landsat-8</td>
+</tr>
+</tbody>
+</table>
+</div>
+<script>
+if (!window.__df_formatter_js_loaded__) {
+  window.__df_formatter_js_loaded__ = true;
+  window.toggleDataFrameCellText = function (table_uuid, row, col) {
+    var shortText = document.getElementById(
+      table_uuid + "-min-text-" + row + "-" + col
+    );
+    var fullText = document.getElementById(
+      table_uuid + "-full-text-" + row + "-" + col
+    );
+    var button = event.target;
+
+    if (fullText.style.display === "none") {
+      shortText.style.display = "none";
+      fullText.style.display = "inline";
+      button.textContent = "(less)";
+    } else {
+      shortText.style.display = "inline";
+      fullText.style.display = "none";
+      button.textContent = "...";
+    }
+  };
+}
+</script>
 </div>
 </div>
 </div>
@@ -2001,7 +2106,7 @@ DataFrame()
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [8]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-5">
@@ -2026,7 +2131,7 @@ DataFrame()
 <span class="s2">        ST_GeomFromText('POLYGON((-15 -15, -15 15, 15 15, 15 -15, -15 -15))')</span>
 <span class="s2">    )</span>
 <span class="s2">"""</span><span class="p">)</span>
-<span class="n">df</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+<span class="n">df</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-5">from geodatafusion import register_all
 
@@ -2040,7 +2145,7 @@ df = ctx.sql("""
         ST_GeomFromText('POLYGON((-15 -15, -15 15, 15 15, 15 -15, -15 -15))')
     )
 """)
-df.show()</div>
+df</div>
 </div>
 </div>
 </div>
@@ -2049,17 +2154,86 @@ df.show()</div>
 <div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
 </div>
 <div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>DataFrame()
-+---------------------+------------+
-| date                | collection |
-+---------------------+------------+
-| 2023-01-01T00:00:00 | sentinel-2 |
-| 2023-01-02T00:00:00 | sentinel-2 |
-+---------------------+------------+
-</pre>
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[6]:</div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
+<script>
+if (!document.getElementById('df-styles')) {
+  const style = document.createElement('style');
+  style.id = 'df-styles';
+  style.textContent = `
+            .expandable-container {
+                display: inline-block;
+                max-width: 200px;
+            }
+            .expandable {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                display: block;
+            }
+            .full-text {
+                display: none;
+                white-space: normal;
+            }
+            .expand-btn {
+                cursor: pointer;
+                color: blue;
+                text-decoration: underline;
+                border: none;
+                background: none;
+                font-size: inherit;
+                display: block;
+                margin-top: 5px;
+            }
+        `;
+  document.head.appendChild(style);
+}
+</script>
+<div style="width: 100%; max-width: 1000px; max-height: 300px; overflow: auto; border: 1px solid #ccc;">
+<table style="border-collapse: collapse">
+<thead>
+<tr>
+<th style="border: 1px solid black; padding: 8px; text-align: left; background-color: #f2f2f2; white-space: nowrap; min-width: fit-content; max-width: fit-content;">date</th>
+<th style="border: 1px solid black; padding: 8px; text-align: left; background-color: #f2f2f2; white-space: nowrap; min-width: fit-content; max-width: fit-content;">collection</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="border: 1px solid black; padding: 8px; text-align: left; white-space: nowrap;">2023-01-01 00:00:00</td>
+<td style="border: 1px solid black; padding: 8px; text-align: left; white-space: nowrap;">sentinel-2</td>
+</tr>
+<tr>
+<td style="border: 1px solid black; padding: 8px; text-align: left; white-space: nowrap;">2023-01-02 00:00:00</td>
+<td style="border: 1px solid black; padding: 8px; text-align: left; white-space: nowrap;">sentinel-2</td>
+</tr>
+</tbody>
+</table>
+</div>
+<script>
+if (!window.__df_formatter_js_loaded__) {
+  window.__df_formatter_js_loaded__ = true;
+  window.toggleDataFrameCellText = function (table_uuid, row, col) {
+    var shortText = document.getElementById(
+      table_uuid + "-min-text-" + row + "-" + col
+    );
+    var fullText = document.getElementById(
+      table_uuid + "-full-text-" + row + "-" + col
+    );
+    var button = event.target;
+
+    if (fullText.style.display === "none") {
+      shortText.style.display = "none";
+      fullText.style.display = "inline";
+      button.textContent = "(less)";
+    } else {
+      shortText.style.display = "inline";
+      fullText.style.display = "none";
+      button.textContent = "...";
+    }
+  };
+}
+</script>
 </div>
 </div>
 </div>
