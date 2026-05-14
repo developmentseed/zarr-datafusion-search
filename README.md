@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/assets/zarr-datafusion_logo.png" alt="zarr-datafusion-search" width="400">
+</p>
+
 # zarr-datafusion-search
 
 This is a prototype for querying STAC or CMR style _metadata_ about Zarr arrays and groups using [DataFusion](https://datafusion.apache.org/), an extensible query engine written in Rust.

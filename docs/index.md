@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/zarr-datafusion_logo.png" alt="zarr-datafusion-search" width="400">
+</p>
+
 # zarr-datafusion-search
 
 A prototype for querying STAC or CMR style _metadata_ about Zarr arrays and groups
