@@ -33,9 +33,6 @@ impl PyZarrTable {
             .extract()?;
         let icechunk_session = icechunk::session::Session::from_bytes(bytes).unwrap();
 
-        dbg!("Created icechunk session from msgpack serialization");
-        dbg!(icechunk_session.config());
-
         future_into_py(py, async move {
             let table_provider = ZarrTableProvider::new_icechunk(icechunk_session, &group_path)
                 .await
