@@ -15,8 +15,7 @@ async fn test_load_group() {
 
     {
         let storage = Arc::new(FilesystemStore::new(path).unwrap());
-        let group = Group::open(storage.clone(), "/meta").unwrap();
-        dbg!(group.path());
+        let _group = Group::open(storage.clone(), "/meta").unwrap();
     }
 }
 
@@ -35,6 +34,5 @@ async fn test_load_group_icechunk() {
     let version_info = VersionInfo::BranchTipRef("main".to_string());
     let session = repo.readonly_session(&version_info).await.unwrap();
     let store = Arc::new(AsyncIcechunkStore::new(session));
-    let group = Group::async_open(store.clone(), "/meta").await.unwrap();
-    dbg!(group.path());
+    let _group = Group::async_open(store.clone(), "/meta").await.unwrap();
 }
