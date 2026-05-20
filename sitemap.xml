@@ -2,50 +2,50 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://developmentseed.github.io/zarr-datafusion-search/</loc>
-         <lastmod>2026-05-14</lastmod>
+         <lastmod>2026-05-20</lastmod>
     </url>
     <url>
          <loc>https://developmentseed.github.io/zarr-datafusion-search/DEVELOP/</loc>
-         <lastmod>2026-05-14</lastmod>
+         <lastmod>2026-05-20</lastmod>
     </url>
     <url>
          <loc>https://developmentseed.github.io/zarr-datafusion-search/api/ingest/</loc>
-         <lastmod>2026-05-14</lastmod>
+         <lastmod>2026-05-20</lastmod>
     </url>
     <url>
          <loc>https://developmentseed.github.io/zarr-datafusion-search/api/zarr-table/</loc>
-         <lastmod>2026-05-14</lastmod>
+         <lastmod>2026-05-20</lastmod>
     </url>
     <url>
          <loc>https://developmentseed.github.io/zarr-datafusion-search/architecture/query-pipeline/</loc>
-         <lastmod>2026-05-14</lastmod>
+         <lastmod>2026-05-20</lastmod>
     </url>
     <url>
          <loc>https://developmentseed.github.io/zarr-datafusion-search/architecture/zarr/</loc>
-         <lastmod>2026-05-14</lastmod>
+         <lastmod>2026-05-20</lastmod>
     </url>
     <url>
          <loc>https://developmentseed.github.io/zarr-datafusion-search/examples/</loc>
-         <lastmod>2026-05-14</lastmod>
+         <lastmod>2026-05-20</lastmod>
     </url>
     <url>
          <loc>https://developmentseed.github.io/zarr-datafusion-search/examples/quickstart/</loc>
-         <lastmod>2026-05-14</lastmod>
+         <lastmod>2026-05-20</lastmod>
     </url>
     <url>
          <loc>https://developmentseed.github.io/zarr-datafusion-search/examples/spatial_index/</loc>
-         <lastmod>2026-05-14</lastmod>
+         <lastmod>2026-05-20</lastmod>
     </url>
     <url>
          <loc>https://developmentseed.github.io/zarr-datafusion-search/examples/stac_virtualizarr/</loc>
-         <lastmod>2026-05-14</lastmod>
+         <lastmod>2026-05-20</lastmod>
     </url>
     <url>
          <loc>https://developmentseed.github.io/zarr-datafusion-search/user-guide/installation/</loc>
-         <lastmod>2026-05-14</lastmod>
+         <lastmod>2026-05-20</lastmod>
     </url>
     <url>
          <loc>https://developmentseed.github.io/zarr-datafusion-search/user-guide/quickstart/</loc>
-         <lastmod>2026-05-14</lastmod>
+         <lastmod>2026-05-20</lastmod>
     </url>
 </urlset>
