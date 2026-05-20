@@ -179,6 +179,5 @@ async fn test_load_bbox_array() {
         let store = Arc::new(FilesystemStore::new(path).unwrap());
 
         let bbox_array = Array::open(store.clone(), "/meta/bbox").unwrap();
-
     }
 }
